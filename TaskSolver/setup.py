@@ -13,7 +13,6 @@ setup(
         "streamlit==1.37.1",
         "flask==3.0.3",
         "flask_cors==4.0.1",
-        "ollama",
         "anthropic==0.34.0",
         "google-generativeai",
         "transformers==4.46.1",
@@ -21,7 +20,6 @@ setup(
         "shortuuid==1.0.11",
         "qwen_vl_utils",
         "decord==0.6.0",
-        "sentencepiece==0.1.99",
         "timm==1.0.11",
         "einops==0.8.0",
         "accelerate==0.30.1",
@@ -32,6 +30,5 @@ setup(
         "torchaudio",
         "httpx==0.27.2", 
         "flash_attn==2.6.3",
-        "autoawq==0.1.8",
     ]
 )

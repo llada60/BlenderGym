@@ -119,9 +119,12 @@ if __name__=='__main__':
                     task_instance_scores[proposal_name][render_name] = {}
 
                     # Get path for render
-                    proposal_render = Image.open(os.path.join(proposal_renders_dir, render_name))
-                    gt_render = Image.open(os.path.join(task_instance_dir, 'goal', render_name))
-
+                    try:
+                        proposal_render = Image.open(os.path.join(proposal_renders_dir, render_name))
+                        gt_render = Image.open(os.path.join(task_instance_dir, 'goal', render_name))
+                    except:
+                        continue
+                    
                     # Compute n_clip and pl
                     n_clip = float(1 - clip_similarity(proposal_render, gt_render))
                     pl = float(photometric_loss(proposal_render, gt_render))
@@ -167,10 +170,14 @@ if __name__=='__main__':
             selected_proposal_path = instance_info['selected_edit_path']
             if selected_proposal_path:
                 selected_proposal_name = os.path.basename(selected_proposal_path).split('.')[0]
-                selectd_n_clip = task_instance_scores[selected_proposal_name]['avg_n_clip']
-                selected_pl = task_instance_scores[selected_proposal_name]['avg_pl']
-                task_instance_scores['selected_scores'] =  (selected_proposal_name, {'avg_n_clip':selectd_n_clip, 'avg_pl':selected_pl})
                 
+                try:
+                    selectd_n_clip = task_instance_scores[selected_proposal_name]['avg_n_clip']
+                    selected_pl = task_instance_scores[selected_proposal_name]['avg_pl']
+                    task_instance_scores['selected_scores'] =  (selected_proposal_name, {'avg_n_clip':selectd_n_clip, 'avg_pl':selected_pl})
+                except:
+                    continue
+
                 # Register this instance to the scores across this task
                 scores_across_instances["selected_n_clip"].append(selectd_n_clip)
                 scores_across_instances["selected_pl"].append(selected_pl)

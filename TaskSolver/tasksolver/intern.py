@@ -158,7 +158,7 @@ class InternModel(object):
             except Exception as e:
                 raise e
             
-            print('outputs: ', output_text)
+            # print('outputs: ', output_text)
             message = {'content' : output_text}
 
             results[idx] = {"metadata": output_text, "message": message} 
@@ -226,7 +226,7 @@ class InternModel(object):
 
 
     def rough_guess(self, question:Question, max_tokens=1000,
-                    max_tries=10, query_id:int=0,
+                    max_tries=1, query_id:int=0,
                     verbose=False, temperature=1,
                     **kwargs):
     
@@ -238,11 +238,12 @@ class InternModel(object):
         while not ok:
             response, meta_data = self.ask(p, temperature=temperature) 
             response = response[0] 
-            logger.info(f'response: {response}')
+            # logger.info(f'response: {response}')
             try: 
                 parsed_response = self.task.answer_type.parser(response["content"])
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                pass
 
                 # if not os.path.exists('errors/'):
                 #     # Create the directory if it doesn't exist
@@ -264,7 +265,7 @@ class InternModel(object):
         return parsed_response, response, meta_data, p
 
     def all_task_rough_guess(self, task, question:Question, max_tokens=1000,
-                    max_tries=10, query_id:int=0,
+                    max_tries=1, query_id:int=0,
                     verbose=False, temperature=1,
                     **kwargs):
     
@@ -276,12 +277,12 @@ class InternModel(object):
         while not ok:
             response, meta_data = self.ask(p, temperature=temperature) 
             response = response[0] 
-            logger.info(f'response: {response}')
+            # logger.info(f'response: {response}')
             try: 
                 parsed_response = task.answer_type.parser(response["content"])
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
-
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                
                 # if not os.path.exists('errors/'):
                 #     # Create the directory if it doesn't exist
                 #     os.makedirs('errors/')
@@ -303,7 +304,7 @@ class InternModel(object):
 
     def many_rough_guesses(self, num_threads:int,
                            question:Question, max_tokens=1000,
-                           verbose=False, max_tries=10, temperature=1
+                           verbose=False, max_tries=1, temperature=1
                            ) -> List[Tuple[ParsedAnswer, str, dict, dict]]:
         """
         Args:
@@ -329,7 +330,7 @@ class InternModel(object):
             try:
                 parsed_response = [self.task.answer_type.parser(r["content"]) for r in response]
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
 
                 # TODO provide the parse error message into GPT for the next round to be parsable
                 reattempt += 1

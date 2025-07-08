@@ -41,7 +41,7 @@ TASKSETTING2PROMPTMODULE = {TaskSetting.GEONODES: "geonodes",
                             TaskSetting.SHAPEKEY: "shapekey",
                             TaskSetting.PLACEMENT: "placement"}
 
-def tree_branch(branching_factor:int, question_to_agent:Question, agent:Agent,
+def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Question, agent:Agent,
                 script_save:Path, render_save:Path, thoughtprocess_save:Path,
                 blender_file:str, blender_script:str,
                 iteration:int, config:dict):
@@ -66,14 +66,13 @@ def tree_branch(branching_factor:int, question_to_agent:Question, agent:Agent,
                 num_tries += 1
                 try:
                     # Generate the code by think, the whole trunk
-                    p_ans = agent.think(question_to_agent, num_tokens=3000, agent_idx=idx)
+                    p_ans = agent.think(question_to_agent, num_tokens=3000, agent_idx=(idx, depth_index))
                     if len(p_ans.code) == 0:
                         logger.warning(f"The following response didn't parse into any code:\n{idx, script_save}")
                         pass
                 except Exception as e: # TODO  ratelimitexception
-                    print(e)
-                    logger.warning(f"thread {idx} LLM querying failed with error:\n{str(e)}") 
-                    time.sleep(30)
+                    # print(e)
+                    # logger.warning(f"thread {idx} LLM querying failed with error:\n{str(e)}") 
                     continue
                 try:
                     # Execute the code by act
@@ -95,7 +94,7 @@ def tree_branch(branching_factor:int, question_to_agent:Question, agent:Agent,
                 code_path = None
                 render_path = None 
             results[idx] = (code_path, render_path, 'placeholder')  # The in-place modification of results with the 3-tuple
-        logger.info(f"thread {idx} released semaphore lock.")
+        # logger.info(f"thread {idx} released semaphore lock.")
 
     # FOR DEBUGGING
     # thread(question_to_agent, 0, results)    
@@ -124,7 +123,7 @@ def tree_branch(branching_factor:int, question_to_agent:Question, agent:Agent,
     return results
 
 
-def get_top_candidate(candidates, target, judge, task_setting:TaskSetting, config:dict, 
+def get_top_candidate(candidates, target, judge, depth_index, task_setting:TaskSetting, config:dict, 
                             target_description=None, use_vision=True,):
 
     prompting_submodule = importlib.import_module("prompting."+TASKSETTING2PROMPTMODULE[task_setting])
@@ -175,8 +174,7 @@ def get_top_candidate(candidates, target, judge, task_setting:TaskSetting, confi
                     p_ans = judge.think(question_to_critic, num_tokens=1000, agent_idx=index)
                     done = True
                 except Exception as e: # TODO  ratelimitexception
-                    logger.warning(f"Sleep for 30s, {str(e)}")
-                    time.sleep(30)
+                    # logger.warning(f"Sleep for 30s, {str(e)}")
                     continue
 
             if done:
@@ -189,8 +187,8 @@ def get_top_candidate(candidates, target, judge, task_setting:TaskSetting, confi
                 results[index] = ([candidate1, candidate2][winner_index], 
                                 (left_img_file, right_img_file),
                                 p_ans.raw, 
-                                question_to_critic)             
-            
+                                question_to_critic)   
+
     # assert len(candidates)%2 == 0, "Number candidates should be even, otherwise not handled."
     assert len(candidates) > 0, "the candidate list is empty"
      
@@ -204,7 +202,7 @@ def get_top_candidate(candidates, target, judge, task_setting:TaskSetting, confi
 
     results = [None]*(num_candidates//2)
 
-    max_tries = 3
+    max_tries = 1
     num_tries = 0
     done = False
     while not done and num_tries < max_tries:
@@ -250,13 +248,14 @@ def get_top_candidate(candidates, target, judge, task_setting:TaskSetting, confi
         intermediates = []
 
     if len(winners) > 1:
-        winner, _intermediates = get_top_candidate(winners, target, judge, config=config,
+        winner, _intermediates = get_top_candidate(winners, target, judge, depth_index, config=config,
                     target_description=target_description, task_setting=task_setting,
                     use_vision=use_vision) 
         return winner, intermediates + _intermediates
     else:
         if not winners:
-            winners.append((None, None))
+            logger.info('Randomly sampled winner is generated.')
+            winners.append(random.choice(candidates))
         return winners[0], intermediates # the only winner
 
 
@@ -528,10 +527,10 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
     #     agent = param_tuner
     #     thinker_is_visual = True
 
-    param_tuner = thinker_class_type (credentials, parameter_search_task, vision_model=run_config["edit_generator_type"])
-    agent = thinker_class_type (credentials, code_editing_task, vision_model=run_config["edit_generator_type"])
+    param_tuner = thinker_class_type(credentials, parameter_search_task, vision_model=run_config["edit_generator_type"])
+    print('Parameter tuner initialized')
+    agent = param_tuner
     thinker_is_visual = True
-
 
     # # Initialize the state evaluator (pruning task)
     # if run_config["state_evaluator_type"] in ("gpt-4o", "o1", "o1-mini", "gpt-4-turbo", "gpt-4o-mini", 'o3-mini', 'gpt-4-turbo'): 
@@ -623,7 +622,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
             # results is a list of length `breadth`, one runnable modification on each entry
             # Each entry is (code_path, render_path, p_ans.raw), code_path is the path to the modified bpy script, 
             # render_path the resulting rendered image, and parsed answer
-            results = tree_branch(breadth, tuner_question, 
+            results = tree_branch(breadth, i, tuner_question, 
                                         agent=param_tuner,
                                         script_save=script_save,
                                         render_save=render_save,
@@ -655,7 +654,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
 
                 # top_candidate is a (code, image) pair
                 top_candidate, intermediates = get_top_candidate(results,
-                                target_image, judge, config=config, 
+                                target_image, judge, i, config=config, 
                                 target_description=target_description, 
                                 task_setting=task_type,
                                 use_vision=evaluator_is_visual)
@@ -687,6 +686,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
 
             # we leap
             #  Craft a question based on the image and text input
+            print(f'Here 689: {code_path}')
             question_to_agent = craft_leap_question(
                 blender_init_code_str = get_code_as_string(code_path),
                 init_image = Image.open(render_path),
@@ -694,7 +694,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
                 target_description=target_description,
                 use_vision=thinker_is_visual) 
 
-            results = tree_branch(breadth, question_to_agent, 
+            results = tree_branch(breadth, i, question_to_agent, 
                                         agent=agent,
                                         script_save=script_save,
                                         render_save=render_save,
@@ -720,7 +720,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
 
             if len(results) > 1:
                 top_candidate, intermediates = get_top_candidate(results, 
-                                target_image, judge, config=config, 
+                                target_image, judge, i, config=config, 
                                 target_description=target_description,
                                 task_setting=task_type,
                                 use_vision=evaluator_is_visual)
@@ -775,7 +775,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
         logger.info(f"Top candidated picked for iteration {i}/{depth-1}(0-indexed) of depth. Code:{top_candidate[0]}, image:{top_candidate[1]}")
 
         with open(thoughtprocess_save/f"iteration_{i}.json", "w") as f:
-            json.dump(process_json, f)
+            json.dump(process_json, f, indent=4)
             logger.info(f"Thought process saved for iteration {i}")
 
         # set new, best so far

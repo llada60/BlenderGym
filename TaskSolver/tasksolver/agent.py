@@ -36,7 +36,14 @@ class Agent(object):
         self.api_key = api_key # if this is a string, then 
         self.vision_model = vision_model
         self.task = task
-        
+
+        '''
+        # # TODO: Add your own model here
+        # elif vision_model == "{model_id of your model}":
+        #     logger.info(f"creating {Name of your model}-based agent of type: {vision_model}")
+        #     self.visual_interface = YourModel(task=task, model=vision_model)
+        '''
+
         if vision_model in ('gpt-4-vision-preview', 'gpt-4', 'gpt-4-turbo', 'gpt-4o-mini', "gpt-4o", "o1-preview", "o1-mini", 'o3-mini', 'o1'):
             # using the open ai key.
             logger.info(f"creating GPT-based agent of type: {vision_model}")
@@ -58,11 +65,11 @@ class Agent(object):
             logger.info(f"creating Gemini-based agent of type: {vision_model}")
             self.visual_interface = GeminiModel(api_key=api_key, task=task, model=vision_model)
 
-        elif vision_model == 'qwen':
-            logger.info(f"creating Qwen-based agent of type: Qwen/Qwen2-VL-7B-Instruct-AWQ.")
-            self.visual_interface = QwenModel(task=task, model='Qwen/Qwen2-VL-7B-Instruct-AWQ')
+        elif vision_model in ('qwen', 'qwenllama'):
+            logger.info(f"creating Qwen-based agent of type: Qwen/Qwen2-VL-7B-Instruct.")
+            self.visual_interface = QwenModel(task=task)
 
-        elif vision_model == 'phi':
+        elif vision_model in ('phi', 'phillama'):
             logger.info(f"creating Phi-based agent of type: microsoft/Phi-3.5-vision-instruct.")
             self.visual_interface = PhiModel(task=task, model='microsoft/Phi-3.5-vision-instruct')
             
@@ -70,23 +77,18 @@ class Agent(object):
             logger.info(f"creating LLaMA-based agent of type: meta-llama/Meta-Llama-3.1-8B-Instruct.")
             self.visual_interface = LlamaModel(task=task, model='meta-llama/Meta-Llama-3.1-8B-Instruct')
 
-        elif vision_model == 'minicpm':
+        elif vision_model in ('minicpm', 'minicpmllama'):
             logger.info(f"creating MiniCPM-based agent of type: openbmb/MiniCPM-V-2_6-int4.")
             self.visual_interface = MiniCPMModel(task=task, model='openbmb/MiniCPM-V-2_6-int4')
 
-        elif vision_model == 'intern':
+        elif vision_model in ('intern', 'internllama'):
             logger.info(f"creating Intern-based agent of type: OpenGVLab/InternVL2-8B.")
             self.visual_interface = InternModel(task=task, model='OpenGVLab/InternVL2-8B')
-
-        '''
-        # # TODO: Add your own model here
-        # elif vision_model == "{model_id of your model}":
-        #     logger.info(f"creating {Name of your model}-based agent of type: {vision_model}")
-        #     self.visual_interface = YourModel(task=task, model=vision_model)
-        '''
-            
         else:
-            raise ValueError('Model id not matched with any avalable choices.')
+            raise ValueError(f'{vision_model} not matched with any avalable choices.')
+
+            
+
          
         if session_token is None:
             self.session_token = str(ObjectId())
@@ -166,7 +168,7 @@ class Agent(object):
         evaluation_question, evaluation_answer = self.task.completed(self)
         ev = EvaluateEvent(completion_question=evaluation_question,
                          completion_eval=evaluation_answer)
-        logger.info(f"evaluator says: {evaluation_answer.success()} -- {evaluation_answer}")
+        # logger.info(f"evaluator says: {evaluation_answer.success()} -- {evaluation_answer}")
         self.event_buffer.add_event(ev)
         if evaluation_answer.success():
             return None

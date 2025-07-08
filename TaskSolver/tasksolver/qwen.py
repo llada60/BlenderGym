@@ -1,6 +1,7 @@
 import argparse
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
+import time
 
 import json
 import random
@@ -42,22 +43,22 @@ class QwenModel(object):
                  model:str = "Qwen/Qwen2-VL-7B-Instruct-AWQ"):
 
         self.task:TaskSpec = task
+        self.model_name = model
         self.model = self.get_model(model)
 
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct-AWQ")
 
-    
     def get_model(self, model):
         # Load the open-source model in
 
         if model == 'Qwen/Qwen2-VL-7B-Instruct-AWQ':
-            model_weights = Qwen2VLForConditionalGeneration.from_pretrained(
-                "Qwen/Qwen2-VL-7B-Instruct-AWQ", attn_implementation="flash_attention_2", torch_dtype=torch.float16, device_map="cuda:0"
-            )
-
             # model_weights = Qwen2VLForConditionalGeneration.from_pretrained(
-            #     "Qwen/Qwen2-VL-7B-Instruct-AWQ", torch_dtype=torch.bfloat16, device='cuda:0'
+            #     "Qwen/Qwen2-VL-7B-Instruct-AWQ", attn_implementation="flash_attention_2", torch_dtype=torch.float16, device_map="cuda:0"
             # )
+
+            model_weights = Qwen2VLForConditionalGeneration.from_pretrained(
+                "Qwen/Qwen2-VL-7B-Instruct-AWQ", torch_dtype=torch.float16, device_map='cuda:0'
+            )
 
             # model_weights = AutoModelForSeq2SeqLM.from_pretrained("Qwen/Qwen2-VL-7B-Instruct-AWQ")             
             return model_weights
@@ -77,12 +78,18 @@ class QwenModel(object):
             messages = payload['messages']
             max_tokens = payload['max_tokens']
 
+            # print(f'messages: {messages}')
+            print(f'self.model: {self.model_name}')
 
             try:
                 # Preparation for inference
+
+                start = time.perf_counter()
                 text = self.processor.apply_chat_template(
                     messages, tokenize=False, add_generation_prompt=True
                 )
+                print(f'text: {text}')
+                print(f'max_tokens: {max_tokens}')
                 image_inputs, video_inputs = process_vision_info(messages)
                 inputs = self.processor(
                     text=[text],
@@ -93,19 +100,27 @@ class QwenModel(object):
                 )
                 inputs = inputs.to("cuda:0")
 
+                print(f"Inputs: {inputs['input_ids'].shape}")
                 # Inference: Generation of the output
-                generated_ids = self.model.generate(**inputs, max_new_tokens=max_tokens)
+                generated_ids = self.model.generate(**inputs, max_new_tokens=200)
+                print(f'generated_ids: {generated_ids.shape}')
                 generated_ids_trimmed = [
                     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
+                print(f'generated_ids_trimmed: {generated_ids_trimmed[0].shape}')
 
                 output_text = self.processor.batch_decode(
                     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                 )
+
+                elapsed = time.perf_counter() - start
+                print(f'Elapsed: {elapsed:.6f} s')
+
+                # print(f'output_text: {output_text}')
             except Exception as e:
                 raise e
             
-            print('outputs: ', output_text)
+            # print('outputs: ', output_text)
             message = {'content' : output_text[0]}
 
             results[idx] = {"metadata": output_text, "message": message} 
@@ -132,7 +147,7 @@ class QwenModel(object):
 
     @staticmethod
     def prepare_payload(question:Question,
-            max_tokens=1000,
+            max_tokens=200,
             verbose:bool=False,
             prepend:Union[dict, None]=None,
             **kwargs
@@ -171,24 +186,32 @@ class QwenModel(object):
         return payload
 
 
-    def rough_guess(self, question:Question, max_tokens=1000,
-                    max_tries=10, query_id:int=0,
+    def rough_guess(self, question:Question, max_tokens=200,
+                    max_tries=1, query_id:int=0,
                     verbose=False, temperature=1,
                     **kwargs):
-    
+        
+        print('Rough guess ready')
+
         p = self.prepare_payload(question, max_tokens = max_tokens, verbose=verbose, prepend=None, 
                                     model=self.model)
+
+        print('Payload ready')
 
         ok = False
         reattempt = 0
         while not ok:
+            print('Here')
             response, meta_data = self.ask(p, temperature=temperature) 
             response = response[0] 
-            logger.info(f'response: {response}')
+            # logger.info(f'response: {response}')
+            print(f'{response}')
+
             try: 
                 parsed_response = self.task.answer_type.parser(response["content"])
+
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
 
                 # if not os.path.exists('errors/'):
                 #     # Create the directory if it doesn't exist
@@ -209,8 +232,8 @@ class QwenModel(object):
 
         return parsed_response, response, meta_data, p
 
-    def all_task_rough_guess(self, task, question:Question, max_tokens=1000,
-                    max_tries=10, query_id:int=0,
+    def all_task_rough_guess(self, task, question:Question, max_tokens=200,
+                    max_tries=1, query_id:int=0,
                     verbose=False, temperature=1,
                     **kwargs):
     
@@ -222,11 +245,11 @@ class QwenModel(object):
         while not ok:
             response, meta_data = self.ask(p, temperature=temperature) 
             response = response[0] 
-            logger.info(f'response: {response}')
+            # logger.info(f'response: {response}')
             try: 
                 parsed_response = task.answer_type.parser(response["content"])
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
 
                 # if not os.path.exists('errors/'):
                 #     # Create the directory if it doesn't exist
@@ -248,8 +271,8 @@ class QwenModel(object):
         return parsed_response, response, meta_data, p
 
     def many_rough_guesses(self, num_threads:int,
-                           question:Question, max_tokens=1000,
-                           verbose=False, max_tries=10, temperature=1
+                           question:Question, max_tokens=200,
+                           verbose=False, max_tries=1, temperature=1
                            ) -> List[Tuple[ParsedAnswer, str, dict, dict]]:
         """
         Args:
@@ -275,7 +298,7 @@ class QwenModel(object):
             try:
                 parsed_response = [self.task.answer_type.parser(r["content"]) for r in response]
             except GPTOutputParseException as e:
-                logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
+                # logger.warning(f"The following was not parseable:\n\n{response}\n\nBecause\n\n{e}")
 
                 # TODO provide the parse error message into GPT for the next round to be parsable
                 reattempt += 1
@@ -289,7 +312,7 @@ class QwenModel(object):
 
         return parsed_response, response, meta_data, p
 
-    def run_once(self, question:Question, max_tokens=1000, temperature=1, **kwargs):
+    def run_once(self, question:Question, max_tokens=200, temperature=1, **kwargs):
         q = self.task.first_question(question) 
         p_ans, ans, meta, p = self.rough_guess(q, max_tokens=max_tokens, temperature=temperature, **kwargs)
         return p_ans, ans, meta, p

@@ -9,11 +9,11 @@ from PIL import Image
 from utils import BlenderAlchemy_run, tree_dim_parse
 
 task_instance_count_dict = {
-    'geometry': 50,
-    'material': 40,
-    'blendshape': 75,
-    'placement': 40,
-    'lighting': 40
+    'geometry': 55,
+    # 'material': 45,
+    # 'blendshape': 85,
+    # 'placement': 50,
+    # 'lighting': 50
 }
 
 def VLMSystem_run(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path):
@@ -138,7 +138,7 @@ if __name__=='__main__':
 
     starter_time = time.strftime("%m-%d-%H-%M-%S")
     if not args.custom_vlm_system:
-        generation_results = {"output_dir_name":f"outputs_{starter_time}", 'generator_type':generator_type, 'evaluator_type': evaluator_type, 'tree_dims': tree_dims}
+        generation_results = {"output_dir_name":f"outputs_{starter_time}", 'generator_type':generator_type, 'verifier_type': verifier_type, 'tree_dims': tree_dims}
     else:
         generation_results = {"output_dir_name":f"outputs_{starter_time}"}
 
@@ -163,10 +163,10 @@ if __name__=='__main__':
 
             # Call the VLM system
             if not custom_vlm_system:
-                if not generator_type or not evaluator_type:
+                if not generator_type or not verifier_type:
                     raise ValueError("For VLM-only usage, please indicate both generator and evaluator model.")
                 try:
-                    proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path = BlenderAlchemy_run(blender_file_path, start_file_path, start_render_path, goal_render_path, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, evaluator_type, starter_time=starter_time, tree_dims=tree_dims)    
+                    proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path = BlenderAlchemy_run(blender_file_path, start_file_path, start_render_path, goal_render_path, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, verifier_type, starter_time=starter_time, tree_dims=tree_dims)    
                 except:
                     continue
             else:

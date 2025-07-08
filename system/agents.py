@@ -43,7 +43,7 @@ class GeneralAgent(Agent):
                         
     def think(self, question: Question, num_tokens: int, agent_idx: int) -> ParsedAnswer:
         print('Into general agent.think')
-        print(self.visual_interface.model)
+        # print(self.visual_interface.model)
         p_ans, ans, meta, p = self.visual_interface.run_once(question, max_tokens=num_tokens)
         return p_ans
 
@@ -106,6 +106,8 @@ class EditCodeAgent(object):
             followup_func=None,
             completed_func=None
         ) 
+        
+        logger.info(f"creating brainstormer agent of type: {self.brainstorm_model_name}")
         self.brainstorming_model = Agent(
                                     api_key, 
                                     task=self.brainstorming_task, 
@@ -119,6 +121,7 @@ class EditCodeAgent(object):
             followup_func=None,
             completed_func=None
         )
+        logger.info(f"creating code delta agent of type: {self.code_delta_model_name}")
         self.code_delta_model = Agent(
                                     api_key,
                                     task=self.code_delta_task,
@@ -130,7 +133,7 @@ class EditCodeAgent(object):
         if agent_idx is None:
             prepend_string = ""
         else: 
-            prepend_string = f"Agent{agent_idx}: "
+            prepend_string = f"Breadth/Depth: {agent_idx[0]}/{agent_idx[1]} (0-indexed)."
         
         # step 1: ask the brainstormer to create a plan
         appended_question="""
@@ -148,24 +151,27 @@ Describe, in a bullet-point list (using * as the bullet points), the biggest vis
 
         done = False
         tries = 0 
-        max_tries = 10
+        max_tries = 1
 
         while not done and tries < max_tries: 
-            logger.info(f"PLANNING ATTEMPT #{tries}")
+            logger.info(prepend_string + f"PLANNING ATTEMPT #{tries}")
             list_of_diffs, _, _, _ = self.brainstorming_model.rough_guess(question)
             tries += 1
             if len(list_of_diffs.list_items) == 0:
-                logger.warning(prepend_string + f"retrying ({tries})...")
+                logger.warning(prepend_string + f"No change suggested: retrying ({tries})...")
                 continue # reform plan.
-                
-            logger.info(prepend_string + "Goals:"+"\n\n".join(list_of_diffs.list_items)) 
+            
+            diffs = list_of_diffs.list_items
+            diffs = diffs[:10]
+            logger.info(prepend_string + f"Goals: {len(diffs)}")
 
             # step 2: Translate into concrete edits proposals.
             code2llm = PythonExecutableAnswer.parser(str(question)).code
             diffs_to_implement = [] 
             replan = False
             
-            for goal in list_of_diffs.list_items:
+            for i in range(min(len(diffs), 10)):
+                goal = diffs[i]
                 prompt = f"""
 You'd like to do the following: {goal}
 Convert this into a concrete code difference indicated by "Before:" and "After:" labels,
@@ -195,14 +201,14 @@ NOTE THAT DO NOT COPY-PASTE THE WHOLE ORIGINAL CODE, WHICH IS TOO LONG. JUST IND
 
                 delta_done = False
                 delta_tries = 0
-                delta_max_tries = 10
+                delta_max_tries = 1
                 while not delta_done and delta_tries < delta_max_tries:
                     try:
                         diff, _, _, _ = self.code_delta_model.rough_guess(delta_question)
                         tries += 1
                         delta_done = True
                     except GPTOutputParseException as e:
-                        logger.warning(prepend_string + f"Parsing of code delta for goal {goal} failed: {str(e)}")
+                        # logger.warning(prepend_string + f"Parsing of code delta for goal {goal} failed: {str(e)}")
                         logger.warning(prepend_string + f"retrying delta extraction ({delta_tries})...")
 
             
@@ -211,7 +217,9 @@ NOTE THAT DO NOT COPY-PASTE THE WHOLE ORIGINAL CODE, WHICH IS TOO LONG. JUST IND
                     edit_code(code2llm, diff.code_from, diff.code_to)
                     diffs_to_implement.append(diff)
                 except ToolCallException as e:
-                    logger.warning(prepend_string + f"Code diff before...\n{diff.code_from}\n...not found in original code!") 
+                    # logger.warning(prepend_string + f"Code diff before...\n{diff.code_from}\n...not found in original code!") 
+                    logger.warning(prepend_string + f"Code diff before not found in original code!") 
+
                     # logger.warning(f"REPLANNING. Execution of goal {goal} led to the following error: {str(e)}")
                     # replan = True
                     # break # breaking out of for loop to retrigger planning
@@ -234,7 +242,7 @@ NOTE THAT DO NOT COPY-PASTE THE WHOLE ORIGINAL CODE, WHICH IS TOO LONG. JUST IND
                 mod_code = edit_code(edited_code, diff.code_from, diff.code_to)
                 completed_diffs += 1
             except ToolCallException as e:
-                logger.warning(prepend_string + f"Skipping this diff, since execution of goal {goal} led to the following error: {str(e)}")
+                logger.warning(prepend_string + f"Skipping this diff, since execution of goal led to an editing error.")
                 continue
             edit_stages.append(mod_code) 
             edited_code = mod_code
