@@ -264,6 +264,11 @@ def make_if_nonexistent(folder):
         os.makedirs(folder)
     return folder
 
+
+def remove_if_directory(path):
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+
 # def blender_step(config, blender_file, blender_script, script_path, render_path, 
 #                 verify_render_path=True):
 
@@ -431,6 +436,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
     target_render_file = config["input"]["input_image"]     # Dalle generated pseudo-target image based on the text file
     
     assert init_code is not None
+    remove_if_directory(init_render_file)
     if not os.path.exists(init_render_file):
         # blender_step(config, blender_file, blender_script, init_code, init_render_file, verify_render_path=True)        
         blender_step(config["run_config"]["blender_command"], blender_file, blender_script, init_code, init_render_file, merge_all_renders=True, merge_dir_into_image=True)
@@ -439,6 +445,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
 
 
     if target_render_file is not None:      # If provided with a path to ideal target image
+        remove_if_directory(target_render_file)
         if target_code is not None and not os.path.exists(target_render_file):  # If target_code is also provided and no image provided
             # blender_step(config, blender_file, blender_script, target_code, target_render_file,  verify_render_path=True)  # Render and overwrite the dalle generated images
             blender_step(config["run_config"]["blender_command"], blender_file, blender_script, target_code, target_render_file, merge_all_renders=True, merge_dir_into_image=True)
@@ -830,6 +837,7 @@ def refinement_oneshot_no_verifier(
     target_render_file = config["input"]["input_image"]
 
     assert init_code is not None
+    remove_if_directory(init_render_file)
     if not os.path.exists(init_render_file):
         blender_step(
             config["run_config"]["blender_command"],
@@ -842,6 +850,7 @@ def refinement_oneshot_no_verifier(
         )
 
     if target_render_file is not None:
+        remove_if_directory(target_render_file)
         if target_code is not None and not os.path.exists(target_render_file):
             blender_step(
                 config["run_config"]["blender_command"],
