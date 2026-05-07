@@ -8,7 +8,6 @@ import argparse
 import yaml
 from loguru import logger
 
-from openai import OpenAI
 import urllib
 
 from refinement_process import refinement
@@ -36,12 +35,10 @@ if __name__ == "__main__":
         config["run_config"]["edit_generator_type"] = model_id
         config["run_config"]["state_evaluator_type"] = model_id
 
-    # initialize the image generator client
     kc = KeyChain() 
     for el in config["credentials"]:
         if config["credentials"][el] is not None:
             kc.add_key(el, config["credentials"][el])
-    client = OpenAI(api_key=kc["openai"])  
     
     output_dir = Path(config['output']['output_dir'])
     if not output_dir.exists():
@@ -54,6 +51,15 @@ if __name__ == "__main__":
 
 
     if config["run_config"]["enable_visual_imagination"]:
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise ImportError(
+                "OpenAI SDK is required only when enable_visual_imagination is true. "
+                "Install it with `pip install openai` or disable visual imagination."
+            ) from exc
+
+        client = OpenAI(api_key=kc["openai"])
         assert config["run_config"]["num_tries"] > 0, "number of starter images should be positive if imagination is on."
         download_paths = []
         for i in range(config["run_config"]["num_tries"]):     # The number of starer_images entered in cmd line

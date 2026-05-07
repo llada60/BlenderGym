@@ -9,10 +9,10 @@ from PIL import Image
 from utils import BlenderAlchemy_run, tree_dim_parse
 
 task_instance_count_dict = {
-    'geometry': 55,
+    # 'geometry': 55,
     # 'material': 45,
     # 'blendshape': 85,
-    # 'placement': 50,
+    'placement': 50,
     # 'lighting': 50
 }
 
@@ -67,7 +67,7 @@ if __name__=='__main__':
     )
 
     parser.add_argument('--infinigen_installation_path', 
-        type=str, default=f"{os.path.abspath('infinigen/blender/blender')}", 
+        type=str, default=f"{os.path.abspath('infinigen/Blender.app/Contents/MacOS/Blender')}", 
         help="The installation path of blender executable file. It's `infinigen/blender/blender` by default."
     )
 
@@ -77,14 +77,20 @@ if __name__=='__main__':
         If you choose to use your custom_vlm_system, please implement the function VLMSystem_run().'''
     )
 
+    parser.add_argument('--vlm_only',
+        action='store_true',
+        help='''Backward-compatible alias for the default BlenderAlchemy VLM-only flow.
+        This flag is no longer required because VLM-only is the default unless --custom_vlm_system is set.'''
+    )
+
     parser.add_argument('--generator_type', 
         type=str, default=None, 
         help="model_id of VLM generator. Note this is the specific id listed in Supported Models or named by you."
     )
     
-    parser.add_argument('--verifier_type', 
-        type=str, default=None, 
-        help="model_id of VLM verifier. Note this is the specific id listed in Supported Models or named by you."
+    parser.add_argument('--verifier_type', '--evaluator_type',
+        dest='verifier_type', type=str, default=None, 
+        help="model_id of VLM verifier. --evaluator_type is kept as a backward-compatible alias."
     )
     
     parser.add_argument('--tree_dims', 
@@ -190,7 +196,6 @@ if __name__=='__main__':
 
             with open(info_saving_json_path, 'w') as file:
                 json.dump(generation_results, file, indent=4)
-
 
 
 

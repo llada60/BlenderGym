@@ -43,15 +43,19 @@ To sanity-check your API / local implementation, you can optionally jump to [Tes
 ## Inference on BlenderGym
 This section introduces how to run your VLM on BlenderGym data to generate output edits.
 ```
-python inference.py --task placement --vlm_only --generator_type [model_id] --evaluator_type [model_id]
+python inference.py --task placement --generator_type [model_id] --verifier_type [model_id]
+
+# Backward-compatible legacy form:
+# python inference.py --task placement --vlm_only --generator_type [model_id] --evaluator_type [model_id]
 
 # Minimal example:
-# python inference.py --task test --vlm_only --generator_type qwen --evaluator_type qwen
+# python inference.py --task test --generator_type qwen --verifier_type qwen
 ```
 where:
 * `--task`: the task your VLM is evaluated on. You may enter task names, or one of "all", "subset", "test."
 * `--generator_type`: `model_id` for generator VLM.
 * `--verifier_type`: `model_id` for verifier VLM.
+* `--vlm_only`: optional legacy flag; VLM-only inference is now the default unless `--custom_vlm_system` is set.
 
 More details about the format of those arguments can be found in `inference.py`. Models in [Supported Models](#supported-models) are provided with their `model_id`. For custom VLMs, you may use the `model_id` you defined in [Custom VLM Plug-in](#custom-vlm-plug-in). 
 
@@ -142,7 +146,6 @@ If you find our work useful, please cite the Bibtex below:
       url={https://arxiv.org/abs/2504.01786}, 
 }
 ```
-
 
 
 

@@ -10,18 +10,39 @@ if __name__ == "__main__":
     code_fpath = sys.argv[6]  # Path to the code file
     rendering_dir = sys.argv[7] # Path to save the rendering from camera1
 
-    # Enable GPU rendering
+    # Enable GPU rendering when the current Blender build exposes a supported device type.
     bpy.context.scene.render.engine = 'CYCLES'
-    bpy.context.preferences.addons['cycles'].preferences.compute_device_type = 'CUDA'  # or 'OPTIX' if your GPU supports it
-    bpy.context.preferences.addons['cycles'].preferences.get_devices()
+    cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
 
-    # Check and select the GPUs
-    for device in bpy.context.preferences.addons['cycles'].preferences.devices:
-        if device.type == 'GPU' and not device.use:
-            device.use = True
+    preferred_device_types = []
+    if platform == "darwin":
+        preferred_device_types = ["METAL", "NONE"]
+    elif platform == "linux" or platform == "linux2":
+        preferred_device_types = ["OPTIX", "CUDA", "NONE"]
+    elif platform == "win32":
+        preferred_device_types = ["OPTIX", "CUDA", "NONE"]
+    else:
+        preferred_device_types = ["NONE"]
 
-    # Set the rendering device to GPU
-    bpy.context.scene.cycles.device = 'GPU'
+    selected_device_type = "NONE"
+    for device_type in preferred_device_types:
+        try:
+            cycles_prefs.compute_device_type = device_type
+            selected_device_type = device_type
+            break
+        except TypeError:
+            continue
+
+    cycles_prefs.get_devices()
+
+    use_gpu = selected_device_type != "NONE"
+    for device in cycles_prefs.devices:
+        if use_gpu:
+            device.use = device.type in {"GPU", "METAL", "OPTIX", "CUDA"}
+        else:
+            device.use = device.type == "CPU"
+
+    bpy.context.scene.cycles.device = 'GPU' if use_gpu else 'CPU'
 
     # Setting up rendering resolution
     bpy.context.scene.render.resolution_x = 512
@@ -61,7 +82,6 @@ if __name__ == "__main__":
         bpy.context.scene.render.image_settings.file_format = 'PNG'
         bpy.context.scene.render.filepath = os.path.join(rendering_dir, 'render2.png')
         bpy.ops.render.render(write_still=True)
-
 
 
 
