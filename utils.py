@@ -121,7 +121,7 @@ def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_rende
     return proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path
 
 
-def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, starter_time=None):
+def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, starter_time=None, output_dir_name=None):
     """
     One-shot generation without verifier selection. Generates one runnable edit and returns it directly.
     """
@@ -137,7 +137,9 @@ def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, go
     task = task_translate[task]
     variants = ['tune_leap']
 
-    if starter_time:
+    if output_dir_name:
+        output_folder_name = f"outputs/{output_dir_name}"
+    elif starter_time:
         output_folder_name = f"outputs/outputs_{starter_time}"
     else:
         output_folder_name = "outputs/outputs_test"

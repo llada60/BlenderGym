@@ -53,6 +53,10 @@ def save_json(path, payload):
         json.dump(payload, file, indent=4)
 
 
+def normalize_task_tag(task_arg):
+    return task_arg.strip().replace(',', '_').replace(' ', '')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='One-shot image-based program edits without verifier')
 
@@ -119,8 +123,11 @@ if __name__ == '__main__':
 
     os.makedirs(args.info_saving_dir_path, exist_ok=True)
 
+    task_tag = normalize_task_tag(args.task)
+
     task_signature = {
         "task": args.task,
+        "task_tag": task_tag,
         "generator_type": args.generator_type,
         "tree_dims": args.tree_dims,
         "blender_render_script_path": os.path.abspath(args.blender_render_script_path),
@@ -128,7 +135,7 @@ if __name__ == '__main__':
     }
     resume_state_path = os.path.join(
         args.info_saving_dir_path,
-        f"oneshot_resume_{args.generator_type}_{args.task.replace(',', '_')}.json"
+        f"oneshot_resume_{task_tag}_{args.generator_type}.json"
     )
 
     if os.path.exists(resume_state_path):
@@ -140,6 +147,7 @@ if __name__ == '__main__':
                 "Use the same command to resume, or remove that resume file first."
             )
         starter_time = resume_state["starter_time"]
+        output_dir_name = resume_state.get("output_dir_name", f"outputs_{starter_time}")
         info_saving_json_path = resume_state["info_saving_json_path"]
         pending_items = resume_state["pending_items"]
         generation_results = resume_state["generation_results"]
@@ -150,12 +158,13 @@ if __name__ == '__main__':
         print(f'task_instance_dir_paths: {task_instance_dir_paths}')
 
         starter_time = time.strftime("%m-%d-%H-%M-%S")
+        output_dir_name = f"outputs_{task_tag}_{starter_time}"
         info_saving_json_path = os.path.join(
             args.info_saving_dir_path,
-            f'intermediate_metadata_oneshot_{starter_time}.json'
+            f'intermediate_metadata_oneshot_{task_tag}_{starter_time}.json'
         )
         generation_results = {
-            "output_dir_name": f"outputs_{starter_time}",
+            "output_dir_name": output_dir_name,
             "generator_type": args.generator_type,
             "tree_dims": [1, 1],
             "mode": "oneshot_no_verifier",
@@ -189,6 +198,7 @@ if __name__ == '__main__':
                 args.infinigen_installation_path,
                 args.generator_type,
                 starter_time=starter_time,
+                output_dir_name=output_dir_name,
             )
         except Exception as exc:
             generation_results[task][task_instance_id]['instance_dir_path'] = instance_dir_path
@@ -208,6 +218,7 @@ if __name__ == '__main__':
             resume_state = {
                 "task_signature": task_signature,
                 "starter_time": starter_time,
+                "output_dir_name": output_dir_name,
                 "info_saving_json_path": info_saving_json_path,
                 "pending_items": remaining_pending_items,
                 "generation_results": generation_results,
