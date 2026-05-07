@@ -15,7 +15,7 @@ import PIL
 class GeminiModel(object):
     def __init__(self, api_key:str,
                  task:TaskSpec,
-                 model:str="gemini-pro-vision"):
+                 model:str="gemini-2.0-flash"):
         self.gemini_key:str = api_key
         self.task:TaskSpec = task
         self.model:str = model

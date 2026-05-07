@@ -8,14 +8,19 @@ from copy import deepcopy
 import time
 import os
 
+CLAUDE_MODEL_ALIASES = {
+    "claude-3.7-sonnet-latest": "claude-3-7-sonnet-latest",
+}
+
+
 class ClaudeModel(object):
     def __init__(self, api_key:str,
                  task:TaskSpec,
-                 model:str = "claude-3-haiku-20240307"):
+                 model:str = "claude-sonnet-4-6"):
 
         self.claude_key:str = api_key
         self.task:TaskSpec = task
-        self.model:str = model
+        self.model:str = CLAUDE_MODEL_ALIASES.get(model, model)
 
     def ask(self,  payload:dict, n_choices=1) -> Tuple[List[dict], List[dict]]:
         """
@@ -30,7 +35,7 @@ class ClaudeModel(object):
 
             try:
                 raw_response = client.messages.create(
-                    model="claude-3-haiku-20240307",
+                    model=self.model,
                     #messages=[{"role": "user", "content": "Hello, Claude, tell me a number between 1 to 10000 please."}],
                     messages = [mod_payload["messages"]],
                     max_tokens=mod_payload["max_tokens"],

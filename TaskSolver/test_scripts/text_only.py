@@ -5,17 +5,9 @@ Toy setting for test-only input to test VLM implementation.
 """
 
 from tasksolver.common import TaskSpec, ParsedAnswer, Question, KeyChain
-from tasksolver.ollama import OllamaModel
-from tasksolver.llama import LlamaModel
 from tasksolver.exceptions import *
 from tasksolver.utils import docs_for_GPT4
-from tasksolver.claude import ClaudeModel
-from tasksolver.gemini import GeminiModel
-from tasksolver.qwen import QwenModel
-from tasksolver.gpt4v import GPTModel
-from tasksolver.phi import PhiModel
-from tasksolver.minicpm import MiniCPMModel
-from tasksolver.intern import InternModel
+import argparse
 
 '''
 TODO: Import the class instance for your own model
@@ -74,11 +66,49 @@ cointoss.add_background(
     ])
 )
 
+def build_interface(model_name: str):
+    if model_name == "claude":
+        from tasksolver.claude import ClaudeModel
+
+        return ClaudeModel(api_key=api_dict['claude_api_key'], task=cointoss, model='claude-3-5-sonnet-latest')
+    if model_name == "claude-code":
+        from tasksolver.claude_code import ClaudeCodeModel
+
+        return ClaudeCodeModel(api_key=None, task=cointoss)
+    if model_name == "gpt":
+        from tasksolver.gpt4v import GPTModel
+
+        return GPTModel(api_key=api_dict['openai_api_key'], task=cointoss, model='gpt-4o-mini')
+    if model_name == "gemini":
+        from tasksolver.gemini import GeminiModel
+
+        return GeminiModel(api_key=api_dict['gemini_api_key'], task=cointoss, model='gemini-2.0-flash')
+    if model_name == "qwen":
+        from tasksolver.qwen import QwenModel
+
+        return QwenModel(task=cointoss)
+    if model_name == "intern":
+        from tasksolver.intern import InternModel
+
+        return InternModel(task=cointoss)
+
+    raise ValueError(f"Unknown model test target: {model_name}")
+
+
 if __name__=='__main__':
+    parser = argparse.ArgumentParser(description="Smoke test language-only model setup.")
+    parser.add_argument(
+        "--model",
+        choices=["claude", "claude-code", "gpt", "gemini", "qwen", "intern"],
+        default="claude-code",
+        help="Model backend to test. `claude-code` uses your local Claude Code Pro login; `claude` uses an Anthropic API key.",
+    )
+    args = parser.parse_args()
+
     question = Question(["Toss the coin. What's the outcome?"])
 
     # interface = InternModel(task=cointoss)
-    interface = ClaudeModel(api_key=api_dict['claude_api_key'], task=cointoss, model='claude-3-5-sonnet-latest')
+    interface = build_interface(args.model)
 
     '''
     # TODO: add your own model here. 
@@ -91,6 +121,3 @@ if __name__=='__main__':
     model_input = cointoss.first_question(question)
     out, _, _, _ = interface.rough_guess(model_input, max_tokens=2000)
     print(out)
-
-
-

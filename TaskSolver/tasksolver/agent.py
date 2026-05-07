@@ -3,15 +3,6 @@ General agents class
 """
 
 from .common import *
-from .gpt4v import *
-from .ollama import *
-from .claude import *
-from .gemini import *
-from .qwen import *
-from .phi import *
-from .llama import *
-from .minicpm import *
-from .intern import *
 from abc import abstractmethod
 from typing import Union, Dict
 from bson import ObjectId
@@ -45,43 +36,75 @@ class Agent(object):
         '''
 
         if vision_model in ('gpt-4-vision-preview', 'gpt-4', 'gpt-4-turbo', 'gpt-4o-mini', "gpt-4o", "o1-preview", "o1-mini", 'o3-mini', 'o1'):
+            from .gpt4v import GPTModel
+
             # using the open ai key.
             logger.info(f"creating GPT-based agent of type: {vision_model}")
             if isinstance(api_key, KeyChain):
                 api_key = api_key["openai"]
             self.visual_interface = GPTModel(api_key, task, model=vision_model)
         
-        elif vision_model in ("claude-3-5-sonnet-latest", "claude-3-haiku-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest", 'claude-3-7-sonnet-latest'):
+        elif vision_model in ("claude-3-5-sonnet-latest", "claude-3-haiku-latest", "claude-3-5-haiku-latest", "claude-3-opus-latest", 'claude-3-7-sonnet-latest', "claude-3.7-sonnet-latest", "claude-sonnet-4-5", "claude-sonnet-4-6", "claude-opus-4-7", "claude-haiku-4-5", "claude-opus-4-5"):
+            from .claude import ClaudeModel
+
             # using the claude key.
             logger.info(f"creating Claude-based agent of type: {vision_model}")
             if isinstance(api_key, KeyChain):
                 api_key = api_key["claude"]
-            self.visual_interface = ClaudeModel(api_key, task)
+            self.visual_interface = ClaudeModel(api_key, task, model=vision_model)
+
+        elif vision_model == "claude-code" or vision_model.startswith("claude-code-"):
+            from .claude_code import ClaudeCodeModel
+
+            logger.info(f"creating Claude Code CLI-based agent of type: {vision_model}")
+            _CLAUDE_CODE_ALIASES = {"claude-code-sonnet": "sonnet", "claude-code-opus": "opus"}
+            if vision_model in _CLAUDE_CODE_ALIASES:
+                model = _CLAUDE_CODE_ALIASES[vision_model]
+            elif vision_model == "claude-code":
+                model = None
+            else:
+                # e.g. "claude-code-sonnet-4-6" -> "claude-sonnet-4-6"
+                model = "claude-" + vision_model[len("claude-code-"):]
+            self.visual_interface = ClaudeCodeModel(None, task, model=model)
         
         elif vision_model in ('gemini-pro', 'gemini-pro-vision', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'):
+            from .gemini import GeminiModel
+
             # using the gemini key.
             if isinstance(api_key, KeyChain):
                 api_key = api_key["gemini"]
+            if vision_model in ('gemini-pro', 'gemini-pro-vision', 'gemini-1.5-pro'):
+                vision_model = 'gemini-2.0-flash'
             logger.info(f"creating Gemini-based agent of type: {vision_model}")
             self.visual_interface = GeminiModel(api_key=api_key, task=task, model=vision_model)
 
         elif vision_model in ('qwen', 'qwenllama'):
+            from .qwen import QwenModel
+
             logger.info(f"creating Qwen-based agent of type: Qwen/Qwen2-VL-7B-Instruct.")
             self.visual_interface = QwenModel(task=task)
 
         elif vision_model in ('phi', 'phillama'):
+            from .phi import PhiModel
+
             logger.info(f"creating Phi-based agent of type: microsoft/Phi-3.5-vision-instruct.")
             self.visual_interface = PhiModel(task=task, model='microsoft/Phi-3.5-vision-instruct')
             
         elif vision_model == 'llama':
+            from .llama import LlamaModel
+
             logger.info(f"creating LLaMA-based agent of type: meta-llama/Meta-Llama-3.1-8B-Instruct.")
             self.visual_interface = LlamaModel(task=task, model='meta-llama/Meta-Llama-3.1-8B-Instruct')
 
         elif vision_model in ('minicpm', 'minicpmllama'):
+            from .minicpm import MiniCPMModel
+
             logger.info(f"creating MiniCPM-based agent of type: openbmb/MiniCPM-V-2_6-int4.")
             self.visual_interface = MiniCPMModel(task=task, model='openbmb/MiniCPM-V-2_6-int4')
 
         elif vision_model in ('intern', 'internllama'):
+            from .intern import InternModel
+
             logger.info(f"creating Intern-based agent of type: OpenGVLab/InternVL2-8B.")
             self.visual_interface = InternModel(task=task, model='OpenGVLab/InternVL2-8B')
         else:
