@@ -3,9 +3,41 @@ import random
 import json
 import os
 import sys
+import site
+import importlib.util
 from sys import platform
 
+def _ensure_gin_importable():
+    try:
+        import gin  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    user_site = site.getusersitepackages()
+    if not user_site:
+        return
+
+    gin_init = os.path.join(user_site, "gin", "__init__.py")
+    gin_pkg_dir = os.path.dirname(gin_init)
+    if not os.path.isfile(gin_init):
+        return
+
+    spec = importlib.util.spec_from_file_location(
+        "gin",
+        gin_init,
+        submodule_search_locations=[gin_pkg_dir],
+    )
+    if spec is None or spec.loader is None:
+        return
+
+    gin_module = importlib.util.module_from_spec(spec)
+    sys.modules["gin"] = gin_module
+    spec.loader.exec_module(gin_module)
+
+
 if __name__ == "__main__":
+    _ensure_gin_importable()
 
     code_fpath = sys.argv[6]  # Path to the code file
     rendering_dir = sys.argv[7] # Path to save the rendering from camera1
@@ -82,6 +114,4 @@ if __name__ == "__main__":
         bpy.context.scene.render.image_settings.file_format = 'PNG'
         bpy.context.scene.render.filepath = os.path.join(rendering_dir, 'render2.png')
         bpy.ops.render.render(write_still=True)
-
-
 
