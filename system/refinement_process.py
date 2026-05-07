@@ -790,4 +790,151 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
                 for el in intermediary_outputs], 
                 rows=1, cols=len(intermediary_outputs))
     fig.savefig(str(output_folder/"best_of.png"))
+
+
+def refinement_oneshot_no_verifier(
+    config,
+    credentials,
+    blender_file,
+    blender_script,
+    init_code,
+    method_variation,
+    output_folder,
+    overwrite=True,
+):
+    run_config = config["run_config"]
+
+    task_type = getattr(TaskSetting, config["task"]["type"].upper())
+    prompting_submodule = importlib.import_module("prompting." + TASKSETTING2PROMPTMODULE[task_type])
+
+    parameter_search_task = getattr(prompting_submodule, "parameter_search_task")
+    craft_tuner_question = getattr(prompting_submodule, "craft_tuner_question")
+    craft_leap_question = getattr(prompting_submodule, "craft_leap_question")
+
+    target_description = None
+    if config["input"]["text_prompt"] is not None:
+        target_description = config["input"]["text_prompt"]
+
+    assert method_variation in ("tune_leap", "leap", "tune")
+
+    script_save = Path(output_folder) / Path("scripts/")
+    render_save = Path(output_folder) / Path("renders/")
+    thoughtprocess_save = Path(output_folder) / Path("thought_process/")
+    make_if_nonexistent(output_folder)
+    make_if_nonexistent(script_save)
+    make_if_nonexistent(render_save)
+    make_if_nonexistent(thoughtprocess_save)
+
+    init_render_file = os.path.join(output_folder, "init_render.png")
+    target_code = config["input"]["target_code"]
+    target_render_file = config["input"]["input_image"]
+
+    assert init_code is not None
+    if not os.path.exists(init_render_file):
+        blender_step(
+            config["run_config"]["blender_command"],
+            blender_file,
+            blender_script,
+            init_code,
+            init_render_file,
+            merge_all_renders=True,
+            merge_dir_into_image=True,
+        )
+
+    if target_render_file is not None:
+        if target_code is not None and not os.path.exists(target_render_file):
+            blender_step(
+                config["run_config"]["blender_command"],
+                blender_file,
+                blender_script,
+                target_code,
+                target_render_file,
+                merge_all_renders=True,
+                merge_dir_into_image=True,
+            )
+        target_image = Image.open(target_render_file)
+    else:
+        target_image = None
+
+    thinker_class_type = GeneralAgent if config["run_config"]["edit_style"] == "rewrite_code" else EditCodeAgent
+    agent = thinker_class_type(credentials, parameter_search_task, vision_model=run_config["edit_generator_type"])
+    thinker_is_visual = True
+
+    code_path = init_code
+    render_path = init_render_file
+
+    if method_variation == "leap":
+        question_to_agent = craft_leap_question(
+            blender_init_code_str=get_code_as_string(code_path),
+            init_image=Image.open(render_path),
+            target_image=target_image,
+            target_description=target_description,
+            use_vision=thinker_is_visual,
+        )
+        phase = "explode_options_LEAP"
+    else:
+        question_to_agent = craft_tuner_question(
+            blender_init_code_str=get_code_as_string(code_path),
+            init_image=Image.open(render_path),
+            target_image=target_image,
+            target_description=target_description,
+            use_vision=thinker_is_visual,
+        )
+        phase = "explode_options_TUNE"
+
+    results = tree_branch(
+        1,
+        0,
+        question_to_agent,
+        agent=agent,
+        script_save=script_save,
+        render_save=render_save,
+        thoughtprocess_save=thoughtprocess_save,
+        blender_file=blender_file,
+        blender_script=blender_script,
+        iteration=0,
+        config=config,
+    )
+    results = [el for el in results if el[0] is not None]
+
+    if not results:
+        raise RuntimeError("One-shot generation failed to produce a runnable edit.")
+
+    top_candidate = results[0]
+    process_json = [
+        {
+            "phase": phase,
+            "iteration": 0,
+            "inbound_question": str(question_to_agent),
+            "choices_image": [res[1] for res in results],
+            "choices_code": [res[0] for res in results],
+            "thought_strings": [res[2] for res in results],
+        },
+        {
+            "phase": "oneshot_selection",
+            "choices_image": [res[1] for res in results],
+            "choices_code": [res[0] for res in results],
+            "winner_image": top_candidate[1],
+            "winner_code": top_candidate[0],
+            "decision_process": None,
+        },
+    ]
+
+    with open(thoughtprocess_save / "iteration_0.json", "w") as f:
+        json.dump(process_json, f, indent=4)
+
+    fig = plot_image_grid(
+        [Image.open(init_render_file), Image.open(top_candidate[1])],
+        rows=1,
+        cols=2,
+        titles=["init", "oneshot"],
+    )
+    fig.savefig(str(output_folder / "best_of.png"))
+
+    return {
+        "selected_edit_path": top_candidate[0],
+        "selected_render_path": top_candidate[1],
+        "proposal_edits_paths": [res[0] for res in results],
+        "proposal_renders_paths": [res[1] for res in results],
+    }
     

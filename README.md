@@ -59,7 +59,22 @@ where:
 
 More details about the format of those arguments can be found in `inference.py`. Models in [Supported Models](#supported-models) are provided with their `model_id`. For custom VLMs, you may use the `model_id` you defined in [Custom VLM Plug-in](#custom-vlm-plug-in). 
 
-Running the command above will generate all the proposal edits and renders in `system/outputs/`. Metadata to all those edit scripts will be saved at `infosaved/` by default. 
+Running the command above will generate all the proposal edits and renders in `system/outputs/`. Metadata to all those edit scripts will be saved at `info_saved/` by default.
+
+## One-shot Inference
+This section introduces a one-shot inference mode that does not use a verifier. It generates exactly one runnable edit and directly returns that result as the final output.
+```
+python inference_oneshot.py --task placement --generator_type [model_id]
+
+# Minimal example:
+# python inference_oneshot.py --task test --generator_type claude-code-sonnet-4-6
+```
+where:
+* `--task`: the task your VLM is evaluated on. You may enter task names, or one of "all", "subset", "test."
+* `--generator_type`: `model_id` for the one-shot VLM generator.
+* `--tree_dims`: kept only for explicitness and must remain `1x1` in one-shot mode.
+
+This mode does not call a verifier or evaluator model. It always runs with one-step, one-candidate generation semantics. Outputs will be saved under `system/outputs/` in directories named like `tune_leap_d1_b1`, and metadata will be saved under `info_saved/` by default.
 
 ## Evaluation of VLM-generated results
 This section introduces how to evaluate the output from your VLM after generating the output edits.
@@ -89,6 +104,12 @@ cd system
 python vlm_single_edit.py --model_id [your_model_id]
 ```
 You should see one tree of edits for one task instance under `system/outputs`.
+
+If you want a single-step run without any verifier at the top level, use:
+```
+python inference_oneshot.py --task test --generator_type [your_model_id]
+```
+This will save outputs under `system/outputs/` with a `d1_b1` suffix and will not call a verifier model.
 
 After you are done with testing the VLM setup, you may jump direclty into to [Inference on BlenderGym](#inference-on-blendergym).
 
@@ -146,7 +167,6 @@ If you find our work useful, please cite the Bibtex below:
       url={https://arxiv.org/abs/2504.01786}, 
 }
 ```
-
 
 
 

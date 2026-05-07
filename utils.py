@@ -120,6 +120,94 @@ def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_rende
 
     return proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path
 
+
+def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, starter_time=None):
+    """
+    One-shot generation without verifier selection. Generates one runnable edit and returns it directly.
+    """
+
+    task_translate = {
+        'geometry': 'geonodes',
+        'material': 'material',
+        'blendshape': 'shapekey',
+        'placement': 'placement',
+        'lighting': 'lighting'
+    }
+
+    task = task_translate[task]
+    variants = ['tune_leap']
+
+    if starter_time:
+        output_folder_name = f"outputs/outputs_{starter_time}"
+    else:
+        output_folder_name = "outputs/outputs_test"
+
+    config_dict = {
+        'task': {'type': task},
+        'credentials': {
+            'openai': 'credentials/openai_api.txt',
+            'claude': 'credentials/claude_api.txt',
+            'gemini': 'credentials/gemini_api.txt',
+        },
+        'input': {
+            'text_prompt': None,
+            'input_image': f'{goal_render}/render1.png',
+            'target_code': None,
+        },
+        'output': {
+            'output_dir': f"{output_folder_name}/{task_instance_id}/"
+        },
+        'run_config': {
+            'blender_command': infinigen_installation_path,
+            'edit_style': "edit_code",
+            'num_tries': 1,
+            'enable_visual_imagination': False,
+            'enable_hypothesis_reversion': False,
+            'variants': variants,
+            'tree_dims': ["1x1"],
+            'edit_generator_type': generator_type,
+            'state_evaluator_type': None,
+            'max_concurrent_rendering_processes': 1,
+            'max_concurrent_evaluation_requests': 1,
+            'max_concurrent_generator_requests': 1
+        }
+    }
+    import yaml
+    config_file_path = os.path.abspath('temp.yml')
+
+    with open(config_file_path, 'w') as file:
+        yaml.dump(config_dict, file)
+
+    command = f'''
+        cd system && \
+
+        python main_oneshot.py \
+            --starter_blend {blender_file_path} \
+            --blender_base {blender_render_script_path} \
+            --blender_script {start_script} \
+            --config {config_file_path}
+    '''
+
+    print(f'config_dict: {config_dict}')
+    print(f'command: {command}')
+
+    subprocess.run(command, shell=True, env=env, check=True)
+
+    output_base = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d1_b1'
+    proposal_edits_dir_path = f'{output_base}/scripts'
+    proposal_renders_dir_path = f'{output_base}/renders'
+    proposal_edits_paths = [os.path.join(proposal_edits_dir_path, edit_path) for edit_path in os.listdir(proposal_edits_dir_path)]
+    proposal_renders_paths = [os.path.join(proposal_renders_dir_path, render_path) for render_path in os.listdir(proposal_renders_dir_path)]
+
+    last_iter_info = f'{output_base}/thought_process/iteration_0.json'
+    with open(last_iter_info, 'r') as file:
+        info = json.load(file)
+
+    selected_edit_path = "system/" + info[-1]['winner_code']
+    selected_render_path = "system/" + info[-1]['winner_image']
+
+    return proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path
+
 def merge_images_in_directory(directory, saved_to_local=True, merge_dir_into_image=True):
     '''
     Merge all images in the given directory into a single image.
@@ -474,4 +562,3 @@ def tree_dim_parse(tree_dims):
 #         # selected_edit_path = '/home/richard/Documents/system/output/task_instance_id/instance0/tune_d2_b3/renders'
 #         # selected_render_path = '/home/richard/Documents/system/output/task_instance_id/instance0/tune_d2_b3/renders'
 #         return proposal_edits_paths, proposal_renders_paths, None, None
-
