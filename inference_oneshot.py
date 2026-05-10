@@ -57,6 +57,17 @@ def normalize_task_tag(task_arg):
     return task_arg.strip().replace(',', '_').replace(' ', '')
 
 
+def normalize_tree_dims(tree_dims):
+    if isinstance(tree_dims, str):
+        parts = tree_dims.lower().split('x')
+        if len(parts) == 2 and all(part.isdigit() for part in parts):
+            return [int(parts[0]), int(parts[1])]
+        return tree_dims
+    if isinstance(tree_dims, (list, tuple)) and len(tree_dims) == 2:
+        return [int(tree_dims[0]), int(tree_dims[1])]
+    return tree_dims
+
+
 def should_stop_on_error(exc):
     msg = str(exc)
     return "LIMIT" in msg
@@ -90,7 +101,7 @@ def run_single_task(args, task):
         "task": task,
         "task_tag": task_tag,
         "generator_type": args.generator_type,
-        "tree_dims": args.tree_dims,
+        "tree_dims": normalize_tree_dims(args.tree_dims),
         "blender_render_script_path": os.path.abspath(args.blender_render_script_path),
         "infinigen_installation_path": os.path.abspath(args.infinigen_installation_path),
     }
@@ -109,7 +120,7 @@ def run_single_task(args, task):
             "task": resume_signature.get("task"),
             "task_tag": resume_signature.get("task_tag", normalize_task_tag(resume_signature.get("task", ""))),
             "generator_type": resume_signature.get("generator_type"),
-            "tree_dims": resume_signature.get("tree_dims"),
+            "tree_dims": normalize_tree_dims(resume_signature.get("tree_dims")),
             "blender_render_script_path": resume_signature.get("blender_render_script_path"),
             "infinigen_installation_path": resume_signature.get("infinigen_installation_path"),
         }
