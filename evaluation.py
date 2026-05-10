@@ -19,6 +19,14 @@ task_instance_count_dict = {
     'lighting': 40
 }
 
+# task_instance_count_dict = {
+#     'geometry': 55,
+#     'material': 45,
+#     'blendshape': 85,
+#     'placement': 50,
+#     'lighting': 50
+# }
+
 if __name__=='__main__':
 
     parser = argparse.ArgumentParser(description='Image-based program edits')

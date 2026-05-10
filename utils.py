@@ -193,7 +193,30 @@ def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, go
     print(f'config_dict: {config_dict}')
     print(f'command: {command}')
 
-    subprocess.run(command, shell=True, env=env, check=True)
+    completed = subprocess.run(
+        command,
+        shell=True,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout)
+    if completed.stderr:
+        print(completed.stderr, file=sys.stderr)
+    if completed.returncode != 0:
+        if "FATAL_LLM_RESPONSE_LIMIT:" in completed.stderr or "FATAL_LLM_RESPONSE_LIMIT:" in completed.stdout:
+            raise RuntimeError(
+                "FATAL_LLM_RESPONSE_LIMIT: "
+                + (completed.stderr.strip() or completed.stdout.strip())
+            )
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
 
     output_base = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d1_b1'
     proposal_edits_dir_path = f'{output_base}/scripts'

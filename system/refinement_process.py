@@ -15,13 +15,14 @@ from loguru import logger
 import threading
 import time
 import io
+import traceback
 
 from utils.image import plot_image_grid
 from utils.code import get_code_as_string
 
 from tasksolver.event import *
 from tasksolver.common import  Question
-from tasksolver.exceptions import  CodeExecutionException
+from tasksolver.exceptions import  CodeExecutionException, GPTMaxTriesExceededException
 from tasksolver.agent import Agent
 from tqdm import tqdm
 
@@ -41,6 +42,26 @@ TASKSETTING2PROMPTMODULE = {TaskSetting.GEONODES: "geonodes",
                             TaskSetting.SHAPEKEY: "shapekey",
                             TaskSetting.PLACEMENT: "placement"}
 
+
+def is_response_limit_error(exc):
+    if isinstance(exc, GPTMaxTriesExceededException):
+        return True
+
+    msg = str(exc).lower()
+    indicators = [
+        "rate limit",
+        "usage limit",
+        "quota",
+        "429",
+        "exceeded your current quota",
+        "credit balance",
+        "token limit",
+        "context length",
+        "too many tokens",
+        "no response",
+    ]
+    return any(indicator in msg for indicator in indicators)
+
 def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Question, agent:Agent,
                 script_save:Path, render_save:Path, thoughtprocess_save:Path,
                 blender_file:str, blender_script:str,
@@ -52,8 +73,37 @@ def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Questio
     query_and_act_semaphore = threading.Semaphore(
         min(config["run_config"]["max_concurrent_rendering_processes"], 
             config["run_config"]["max_concurrent_generator_requests"]) )
+
+    failed_script_save = script_save.parent / "failed_scripts"
+    failed_response_save = thoughtprocess_save.parent / "failed_responses"
+    make_if_nonexistent(failed_script_save)
+    make_if_nonexistent(failed_response_save)
     
     results = [None] * branching_factor     # each slot is a position for a proposed modification
+    fatal_errors = []
+    fatal_errors_lock = threading.Lock()
+
+    def save_failed_artifacts(idx, num_tries, p_ans=None, raw_response=None, error=None):
+        artifact_id = f"{iteration}_{depth_index}_{idx}_{num_tries}_{ObjectId()}"
+
+        if p_ans is not None and getattr(p_ans, "code", None):
+            failed_script_path = failed_script_save / f"{artifact_id}.py"
+            with open(failed_script_path, "w") as f:
+                f.write(p_ans.code)
+
+        if raw_response is not None or error is not None:
+            failed_response_path = failed_response_save / f"{artifact_id}.json"
+            payload = {
+                "iteration": iteration,
+                "depth_index": depth_index,
+                "branch_index": idx,
+                "attempt": num_tries,
+                "raw_response": raw_response,
+                "error": error,
+            }
+            with open(failed_response_path, "w") as f:
+                json.dump(payload, f, indent=4)
+
     def thread(question_to_agent, idx, results):
         # Fill one spot in the list results with a potential code change
         # The code change must be runnable, as checked by agent.act
@@ -64,15 +114,32 @@ def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Questio
             max_tries = 1
             while not done and num_tries < max_tries:
                 num_tries += 1
+                p_ans = None
+                raw_response = None
                 try:
                     # Generate the code by think, the whole trunk
                     p_ans = agent.think(question_to_agent, num_tokens=3000, agent_idx=(idx, depth_index))
+                    raw_response = getattr(p_ans, "raw", None)
                     if len(p_ans.code) == 0:
                         logger.warning(f"The following response didn't parse into any code:\n{idx, script_save}")
+                        save_failed_artifacts(
+                            idx,
+                            num_tries,
+                            p_ans=p_ans,
+                            raw_response=raw_response,
+                            error="Parsed response contained empty code.",
+                        )
                         pass
                 except Exception as e: # TODO  ratelimitexception
-                    # print(e)
-                    # logger.warning(f"thread {idx} LLM querying failed with error:\n{str(e)}") 
+                    save_failed_artifacts(
+                        idx,
+                        num_tries,
+                        raw_response=raw_response,
+                        error=f"LLM querying failed: {str(e)}\n{traceback.format_exc()}",
+                    )
+                    if is_response_limit_error(e):
+                        with fatal_errors_lock:
+                            fatal_errors.append(e)
                     continue
                 try:
                     # Execute the code by act
@@ -85,10 +152,17 @@ def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Questio
                                                     config=config,
                                                     blender_step=blender_step)
                     done = True
-                except CodeExecutionException:
+                except CodeExecutionException as e:
                     # blender execution failed, count failure.
                     # code_exec_exceptions += 1 
                     #logger.warning(f"thread {idx} code execution failed.")
+                    save_failed_artifacts(
+                        idx,
+                        num_tries,
+                        p_ans=p_ans,
+                        raw_response=raw_response,
+                        error=f"Code execution failed: {str(e)}\n{traceback.format_exc()}",
+                    )
                     pass
             if not done: 
                 code_path = None
@@ -120,6 +194,8 @@ def tree_branch(branching_factor:int, depth_index:int, question_to_agent:Questio
             clean_results.append(result)
     
     results = clean_results
+    if fatal_errors:
+        raise fatal_errors[0]
     return results
 
 
@@ -907,6 +983,49 @@ def refinement_oneshot_no_verifier(
     results = [el for el in results if el[0] is not None]
 
     if not results:
+        failed_script_dir = Path(output_folder) / Path("failed_scripts/")
+        failed_response_dir = Path(output_folder) / Path("failed_responses/")
+        failed_scripts = []
+        failed_responses = []
+        failed_errors = []
+
+        if failed_script_dir.exists():
+            failed_scripts = sorted(str(path) for path in failed_script_dir.glob("*.py"))
+        if failed_response_dir.exists():
+            for path in sorted(failed_response_dir.glob("*.json")):
+                try:
+                    with open(path, "r") as f:
+                        payload = json.load(f)
+                        failed_responses.append(payload)
+                        if payload.get("error") is not None:
+                            failed_errors.append(payload["error"])
+                except Exception:
+                    failed_responses.append({"failed_response_path": str(path)})
+                    failed_errors.append(f"Failed to load error details from {path}")
+
+        process_json = [
+            {
+                "phase": phase,
+                "iteration": 0,
+                "inbound_question": str(question_to_agent),
+                "choices_image": [],
+                "choices_code": failed_scripts,
+                "thought_strings": failed_responses,
+                "errors": failed_errors,
+            },
+            {
+                "phase": "oneshot_selection",
+                "choices_image": [],
+                "choices_code": failed_scripts,
+                "winner_image": None,
+                "winner_code": None,
+                "errors": failed_errors,
+                "decision_process": "No runnable edit was produced. See failed_scripts/ and failed_responses/ for details.",
+            },
+        ]
+
+        with open(thoughtprocess_save / "iteration_0.json", "w") as f:
+            json.dump(process_json, f, indent=4)
         raise RuntimeError("One-shot generation failed to produce a runnable edit.")
 
     top_candidate = results[0]

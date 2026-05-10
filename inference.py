@@ -9,11 +9,11 @@ from PIL import Image
 from utils import BlenderAlchemy_run, tree_dim_parse
 
 task_instance_count_dict = {
-    # 'geometry': 55,
-    # 'material': 45,
-    # 'blendshape': 85,
+    'geometry': 55,
+    'material': 45,
+    'blendshape': 85,
     'placement': 50,
-    # 'lighting': 50
+    'lighting': 50
 }
 
 def VLMSystem_run(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path):
