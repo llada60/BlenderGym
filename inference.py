@@ -83,6 +83,18 @@ def save_json(path, payload):
         json.dump(payload, file, indent=4)
 
 
+def persist_resume_state(resume_state_path, task_signature, starter_time, output_dir_name, info_saving_json_path, pending_items, generation_results):
+    resume_state = {
+        "task_signature": task_signature,
+        "starter_time": starter_time,
+        "output_dir_name": output_dir_name,
+        "info_saving_json_path": info_saving_json_path,
+        "pending_items": pending_items,
+        "generation_results": generation_results,
+    }
+    save_json(resume_state_path, resume_state)
+
+
 def normalize_task_tag(task_arg):
     return task_arg.strip().replace(',', '_').replace(' ', '')
 
@@ -104,10 +116,19 @@ def resolve_resume_state_path(info_saving_dir_path, task_name, generator_type, v
     mode_tag = "custom" if custom_vlm_system else "default"
     generator_tag = generator_type or "none"
     verifier_tag = verifier_type or "none"
-    return os.path.join(
+    canonical_path = os.path.join(
         info_saving_dir_path,
         f"resume_{task_name}_{generator_tag}_{verifier_tag}_{mode_tag}.json",
     )
+    legacy_path = os.path.join(
+        info_saving_dir_path,
+        f"resume_{generator_tag}_{verifier_tag}_{task_name}_{mode_tag}.json",
+    )
+
+    # Reuse the legacy filename when present so older interrupted runs still resume.
+    if os.path.exists(legacy_path):
+        return legacy_path
+    return canonical_path
 
 
 def run_single_task(args, task):
@@ -181,7 +202,18 @@ def run_single_task(args, task):
             "resume_state_path": resume_state_path,
         }
 
-    for pending_item in pending_items:
+    save_json(info_saving_json_path, generation_results)
+    persist_resume_state(
+        resume_state_path,
+        task_signature,
+        starter_time,
+        output_dir_name,
+        info_saving_json_path,
+        pending_items,
+        generation_results,
+    )
+
+    for pending_index, pending_item in enumerate(pending_items):
         instance_dir_path = pending_item["instance_dir_path"]
         task_instance_id = os.path.basename(instance_dir_path)
 
@@ -211,6 +243,7 @@ def run_single_task(args, task):
                     args.verifier_type,
                     starter_time=starter_time,
                     tree_dims=normalize_tree_dims(args.tree_dims),
+                    output_dir_name=output_dir_name,
                 )
             else:
                 proposal_edits_paths, proposal_renders_paths, selected_edit_path, selected_render_path = VLMSystem_run(
@@ -238,17 +271,17 @@ def run_single_task(args, task):
                     "error": str(exc),
                 }
 
-                remaining_pending_items = pending_items[pending_items.index(pending_item):]
-                resume_state = {
-                    "task_signature": task_signature,
-                    "starter_time": starter_time,
-                    "output_dir_name": output_dir_name,
-                    "info_saving_json_path": info_saving_json_path,
-                    "pending_items": remaining_pending_items,
-                    "generation_results": generation_results,
-                }
+                remaining_pending_items = pending_items[pending_index:]
                 save_json(info_saving_json_path, generation_results)
-                save_json(resume_state_path, resume_state)
+                persist_resume_state(
+                    resume_state_path,
+                    task_signature,
+                    starter_time,
+                    output_dir_name,
+                    info_saving_json_path,
+                    remaining_pending_items,
+                    generation_results,
+                )
                 raise RuntimeError(
                     f"Inference stopped on {task_instance_id}: {exc}\n"
                     f"Resume state saved to {resume_state_path}"
@@ -264,17 +297,17 @@ def run_single_task(args, task):
             generation_results["status"] = "running_with_failures"
             generation_results["last_error"] = generation_results["failed_instances"][-1]
 
-            remaining_pending_items = pending_items[pending_items.index(pending_item) + 1:]
-            resume_state = {
-                "task_signature": task_signature,
-                "starter_time": starter_time,
-                "output_dir_name": output_dir_name,
-                "info_saving_json_path": info_saving_json_path,
-                "pending_items": remaining_pending_items,
-                "generation_results": generation_results,
-            }
+            remaining_pending_items = pending_items[pending_index + 1:]
             save_json(info_saving_json_path, generation_results)
-            save_json(resume_state_path, resume_state)
+            persist_resume_state(
+                resume_state_path,
+                task_signature,
+                starter_time,
+                output_dir_name,
+                info_saving_json_path,
+                remaining_pending_items,
+                generation_results,
+            )
             print(
                 f"Skipping failed instance {task_instance_id}: {exc}\n"
                 f"Resume state updated at {resume_state_path}"
@@ -295,14 +328,30 @@ def run_single_task(args, task):
         generation_results[task][task_instance_id]['selected_edit_path'] = selected_edit_path
         generation_results[task][task_instance_id]['selected_render_path'] = selected_render_path
         save_json(info_saving_json_path, generation_results)
+        persist_resume_state(
+            resume_state_path,
+            task_signature,
+            starter_time,
+            output_dir_name,
+            info_saving_json_path,
+            pending_items[pending_index + 1:],
+            generation_results,
+        )
 
     if generation_results.get("failed_instances"):
         generation_results["status"] = "completed_with_failures"
     else:
         generation_results["status"] = "completed"
     save_json(info_saving_json_path, generation_results)
-    if os.path.exists(resume_state_path):
-        os.remove(resume_state_path)
+    persist_resume_state(
+        resume_state_path,
+        task_signature,
+        starter_time,
+        output_dir_name,
+        info_saving_json_path,
+        [],
+        generation_results,
+    )
 
 
 if __name__ == '__main__':
@@ -336,7 +385,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--infinigen_installation_path',
         type=str,
-        default=f"{os.path.abspath('infinigen/Blender.app/Contents/MacOS/Blender')}",
+        default=f"{os.path.abspath('infinigen/blender/blender')}",
         help="The installation path of blender executable file. It's `infinigen/blender/blender` by default."
     )
 

@@ -53,6 +53,18 @@ def save_json(path, payload):
         json.dump(payload, file, indent=4)
 
 
+def persist_resume_state(resume_state_path, task_signature, starter_time, output_dir_name, info_saving_json_path, pending_items, generation_results):
+    resume_state = {
+        "task_signature": task_signature,
+        "starter_time": starter_time,
+        "output_dir_name": output_dir_name,
+        "info_saving_json_path": info_saving_json_path,
+        "pending_items": pending_items,
+        "generation_results": generation_results,
+    }
+    save_json(resume_state_path, resume_state)
+
+
 def normalize_task_tag(task_arg):
     return task_arg.strip().replace(',', '_').replace(' ', '')
 
@@ -152,7 +164,18 @@ def run_single_task(args, task):
             "resume_state_path": resume_state_path,
         }
 
-    for pending_item in pending_items:
+    save_json(info_saving_json_path, generation_results)
+    persist_resume_state(
+        resume_state_path,
+        task_signature,
+        starter_time,
+        output_dir_name,
+        info_saving_json_path,
+        pending_items,
+        generation_results,
+    )
+
+    for pending_index, pending_item in enumerate(pending_items):
         instance_dir_path = pending_item["instance_dir_path"]
         task_instance_id = os.path.basename(instance_dir_path)
 
@@ -194,17 +217,17 @@ def run_single_task(args, task):
                     "error": str(exc),
                 }
 
-                remaining_pending_items = pending_items[pending_items.index(pending_item):]
-                resume_state = {
-                    "task_signature": task_signature,
-                    "starter_time": starter_time,
-                    "output_dir_name": output_dir_name,
-                    "info_saving_json_path": info_saving_json_path,
-                    "pending_items": remaining_pending_items,
-                    "generation_results": generation_results,
-                }
+                remaining_pending_items = pending_items[pending_index:]
                 save_json(info_saving_json_path, generation_results)
-                save_json(resume_state_path, resume_state)
+                persist_resume_state(
+                    resume_state_path,
+                    task_signature,
+                    starter_time,
+                    output_dir_name,
+                    info_saving_json_path,
+                    remaining_pending_items,
+                    generation_results,
+                )
                 raise RuntimeError(
                     f"One-shot inference stopped on {task_instance_id}: {exc}\n"
                     f"Resume state saved to {resume_state_path}"
@@ -220,17 +243,17 @@ def run_single_task(args, task):
             generation_results["status"] = "running_with_failures"
             generation_results["last_error"] = generation_results["failed_instances"][-1]
 
-            remaining_pending_items = pending_items[pending_items.index(pending_item) + 1:]
-            resume_state = {
-                "task_signature": task_signature,
-                "starter_time": starter_time,
-                "output_dir_name": output_dir_name,
-                "info_saving_json_path": info_saving_json_path,
-                "pending_items": remaining_pending_items,
-                "generation_results": generation_results,
-            }
+            remaining_pending_items = pending_items[pending_index + 1:]
             save_json(info_saving_json_path, generation_results)
-            save_json(resume_state_path, resume_state)
+            persist_resume_state(
+                resume_state_path,
+                task_signature,
+                starter_time,
+                output_dir_name,
+                info_saving_json_path,
+                remaining_pending_items,
+                generation_results,
+            )
             print(
                 f"Skipping failed instance {task_instance_id}: {exc}\n"
                 f"Resume state updated at {resume_state_path}"
@@ -251,14 +274,30 @@ def run_single_task(args, task):
         generation_results[task][task_instance_id]['selected_edit_path'] = selected_edit_path
         generation_results[task][task_instance_id]['selected_render_path'] = selected_render_path
         save_json(info_saving_json_path, generation_results)
+        persist_resume_state(
+            resume_state_path,
+            task_signature,
+            starter_time,
+            output_dir_name,
+            info_saving_json_path,
+            pending_items[pending_index + 1:],
+            generation_results,
+        )
 
     if generation_results.get("failed_instances"):
         generation_results["status"] = "completed_with_failures"
     else:
         generation_results["status"] = "completed"
     save_json(info_saving_json_path, generation_results)
-    if os.path.exists(resume_state_path):
-        os.remove(resume_state_path)
+    persist_resume_state(
+        resume_state_path,
+        task_signature,
+        starter_time,
+        output_dir_name,
+        info_saving_json_path,
+        [],
+        generation_results,
+    )
 
 
 if __name__ == '__main__':
