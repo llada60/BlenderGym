@@ -306,7 +306,20 @@ if __name__ == '__main__':
         help='Must be `1x1` for one-shot inference; kept only for explicitness.'
     )
 
+    parser.add_argument(
+        '--render_device',
+        type=str,
+        choices=['auto', 'cpu', 'gpu'],
+        default='auto',
+        help="Cycles render device selection. Use 'cpu' to skip GPU initialization entirely.",
+    )
+
     args = parser.parse_args()
+
+    if args.render_device == 'cpu':
+        os.environ["BLENDERGYM_FORCE_CPU"] = "1"
+    elif args.render_device == 'gpu':
+        os.environ.pop("BLENDERGYM_FORCE_CPU", None)
 
     if args.tree_dims != '1x1':
         raise ValueError('inference_oneshot.py only supports --tree_dims 1x1.')
