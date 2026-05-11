@@ -709,7 +709,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
                                         agent=param_tuner,
                                         script_save=script_save,
                                         render_save=render_save,
-                                        thoughtprocess_save=process_json,
+                                        thoughtprocess_save=thoughtprocess_save,
                                         blender_file=blender_file, 
                                         blender_script=blender_script,
                                         iteration=i, config=config)
@@ -781,7 +781,7 @@ def refinement(config, credentials, breadth, depth, blender_file, blender_script
                                         agent=agent,
                                         script_save=script_save,
                                         render_save=render_save,
-                                        thoughtprocess_save=process_json,
+                                        thoughtprocess_save=thoughtprocess_save,
                                         blender_file=blender_file, 
                                         blender_script=blender_script,
                                         iteration=i, config=config)
