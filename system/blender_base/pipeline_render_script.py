@@ -7,6 +7,61 @@ import site
 import importlib.util
 from sys import platform
 
+
+def _set_cycles_device(device_type):
+    cycles_prefs = bpy.context.preferences.addons["cycles"].preferences
+    cycles_prefs.compute_device_type = device_type
+    cycles_prefs.get_devices()
+    use_gpu = device_type != "NONE"
+    for device in cycles_prefs.devices:
+        device.use = use_gpu and device.type in {"GPU", "METAL", "OPTIX", "CUDA"}
+    bpy.context.scene.cycles.device = "GPU" if use_gpu else "CPU"
+
+
+def _configure_cycles_device():
+    force_cpu = os.environ.get("BLENDERGYM_FORCE_CPU", "").lower() in {"1", "true", "yes"}
+    if force_cpu:
+        _set_cycles_device("NONE")
+        return "NONE"
+
+    if platform == "darwin":
+        preferred_device_types = ["METAL", "NONE"]
+    elif platform in {"linux", "linux2", "win32"}:
+        preferred_device_types = ["OPTIX", "CUDA", "NONE"]
+    else:
+        preferred_device_types = ["NONE"]
+
+    for device_type in preferred_device_types:
+        try:
+            _set_cycles_device(device_type)
+            return device_type
+        except TypeError:
+            continue
+    _set_cycles_device("NONE")
+    return "NONE"
+
+
+def _enable_auto_smooth_for_weighted_normals():
+    for obj in bpy.data.objects:
+        if obj.type != "MESH" or obj.data is None:
+            continue
+        if any(mod.type == "WEIGHTED_NORMAL" for mod in obj.modifiers):
+            obj.data.use_auto_smooth = True
+
+
+def _render_with_fallback():
+    try:
+        bpy.ops.render.render(write_still=True)
+    except RuntimeError as exc:
+        message = str(exc).lower()
+        if bpy.context.scene.cycles.device != "GPU":
+            raise
+        if "failed to create cuda context" not in message and "out of memory" not in message:
+            raise
+        print("Cycles GPU initialization failed; retrying render on CPU.")
+        _set_cycles_device("NONE")
+        bpy.ops.render.render(write_still=True)
+
 def _ensure_gin_importable():
     try:
         import gin  # noqa: F401
@@ -42,39 +97,8 @@ if __name__ == "__main__":
     code_fpath = sys.argv[6]  # Path to the code file
     rendering_dir = sys.argv[7] # Path to save the rendering from camera1
 
-    # Enable GPU rendering when the current Blender build exposes a supported device type.
     bpy.context.scene.render.engine = 'CYCLES'
-    cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
-
-    preferred_device_types = []
-    if platform == "darwin":
-        preferred_device_types = ["METAL", "NONE"]
-    elif platform == "linux" or platform == "linux2":
-        preferred_device_types = ["OPTIX", "CUDA", "NONE"]
-    elif platform == "win32":
-        preferred_device_types = ["OPTIX", "CUDA", "NONE"]
-    else:
-        preferred_device_types = ["NONE"]
-
-    selected_device_type = "NONE"
-    for device_type in preferred_device_types:
-        try:
-            cycles_prefs.compute_device_type = device_type
-            selected_device_type = device_type
-            break
-        except TypeError:
-            continue
-
-    cycles_prefs.get_devices()
-
-    use_gpu = selected_device_type != "NONE"
-    for device in cycles_prefs.devices:
-        if use_gpu:
-            device.use = device.type in {"GPU", "METAL", "OPTIX", "CUDA"}
-        else:
-            device.use = device.type == "CPU"
-
-    bpy.context.scene.cycles.device = 'GPU' if use_gpu else 'CPU'
+    _configure_cycles_device()
 
     # Setting up rendering resolution
     bpy.context.scene.render.resolution_x = 512
@@ -94,24 +118,25 @@ if __name__ == "__main__":
     except:
         raise ValueError
 
+    _enable_auto_smooth_for_weighted_normals()
+
     # Render from camera1
     if 'Camera' in bpy.data.objects:
         bpy.context.scene.camera = bpy.data.objects['Camera']
         bpy.context.scene.render.image_settings.file_format = 'PNG'
         bpy.context.scene.render.filepath = os.path.join(rendering_dir, 'render.png')
-        bpy.ops.render.render(write_still=True)
+        _render_with_fallback()
 
     # Render from camera1
     if 'Camera1' in bpy.data.objects:
         bpy.context.scene.camera = bpy.data.objects['Camera1']
         bpy.context.scene.render.image_settings.file_format = 'PNG'
         bpy.context.scene.render.filepath = os.path.join(rendering_dir, 'render1.png')
-        bpy.ops.render.render(write_still=True)
+        _render_with_fallback()
 
     # Render from camera2
     if 'Camera2' in bpy.data.objects:
         bpy.context.scene.camera = bpy.data.objects['Camera2']
         bpy.context.scene.render.image_settings.file_format = 'PNG'
         bpy.context.scene.render.filepath = os.path.join(rendering_dir, 'render2.png')
-        bpy.ops.render.render(write_still=True)
-
+        _render_with_fallback()
