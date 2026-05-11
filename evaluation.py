@@ -78,7 +78,13 @@ if __name__=='__main__':
             continue
         
         # Iterate through each instance
-        scores_across_instances = {'best_n_clip':[], 'selected_n_clip':[], 'best_pl':[], 'selected_pl':[]}
+        scores_across_instances = {
+            'best_n_clip': [],
+            'selected_n_clip': [],
+            'best_pl': [],
+            'selected_pl': [],
+            'non_executable_count': 0,
+        }
 
         for task_instance, instance_info in inference_metadata[task].items():
             task_instance_dir = os.path.join(eval_render_save_dir, task_instance)
@@ -97,6 +103,7 @@ if __name__=='__main__':
                 continue
 
             executable_proposal_names = []
+            non_executable_count = 0
 
             if not proposal_edits_paths:
                 continue
@@ -111,9 +118,12 @@ if __name__=='__main__':
                     try:
                         executable = blender_step(infinigen_installation_path, blender_file_path, blender_render_script_path, proposal_path, proposal_renders_dir, merge_all_renders=False, replace_if_overlap=True)
                     except:
+                        non_executable_count += 1
                         continue
                     if executable:
                         executable_proposal_names.append((proposal_renders_dir,proposal_name))
+                    else:
+                        non_executable_count += 1
                 else:
                     executable_proposal_names.append((proposal_renders_dir,proposal_name))
             
@@ -167,6 +177,11 @@ if __name__=='__main__':
                     json.dump(task_instance_scores, file, indent=4)
 
             if not task_instance_scores:
+                task_instance_scores['non_executable_count'] = non_executable_count
+                task_instance_scores_path = os.path.join(task_instance_dir, 'scores.json')
+                with open(task_instance_scores_path, 'w') as file:
+                    json.dump(task_instance_scores, file, indent=4)
+                scores_across_instances['non_executable_count'] += non_executable_count
                 continue
 
             # Extract best scores and record them
@@ -191,16 +206,20 @@ if __name__=='__main__':
                     selected_pl = task_instance_scores[selected_proposal_name]['avg_pl']
                     task_instance_scores['selected_scores'] =  (selected_proposal_name, {'avg_n_clip':selectd_n_clip, 'avg_pl':selected_pl})
                 except:
-                    continue
+                    selected_proposal_name = None
 
-                # Register this instance to the scores across this task
-                scores_across_instances["selected_n_clip"].append(selectd_n_clip)
-                scores_across_instances["selected_pl"].append(selected_pl)
+                if selected_proposal_name is not None:
+                    # Register this instance to the scores across this task
+                    scores_across_instances["selected_n_clip"].append(selectd_n_clip)
+                    scores_across_instances["selected_pl"].append(selected_pl)
 
             # Save the local scores to the task_instance dir
+            task_instance_scores['non_executable_count'] = non_executable_count
             task_instance_scores_path = os.path.join(task_instance_dir, 'scores.json')
             with open(task_instance_scores_path, 'w') as file:
                 json.dump(task_instance_scores, file, indent=4)
+
+            scores_across_instances['non_executable_count'] += non_executable_count
 
             scores_across_instances_path = os.path.join(eval_render_save_dir, f'{task}_scores.json',)
             with open(scores_across_instances_path, 'w') as file:
@@ -208,13 +227,16 @@ if __name__=='__main__':
 
         # If the model cannot provide any edit for more than 75%
         if len(scores_across_instances['best_n_clip']) < (len(inference_metadata[task]) * 0.25) :
-            scores_across_tasks[task] = {}
+            scores_across_tasks[task] = {
+                'non_executable_count': scores_across_instances['non_executable_count'],
+            }
 
         # If VLM system doesn't support selection
         elif not scores_across_instances["selected_n_clip"]:
             scores_across_tasks[task] = {
                 'best_n_clip': sum(scores_across_instances['best_n_clip']) / len(scores_across_instances['best_n_clip']),
                 'best_pl': sum(scores_across_instances['best_pl']) / len(scores_across_instances['best_pl']),
+                'non_executable_count': scores_across_instances['non_executable_count'],
             }
 
         else: 
@@ -223,6 +245,7 @@ if __name__=='__main__':
                 'best_pl': sum(scores_across_instances['best_pl']) / len(scores_across_instances['best_pl']),
                 'selected_n_clip': sum(scores_across_instances['selected_n_clip']) / len(scores_across_instances['selected_n_clip']),
                 'selected_pl': sum(scores_across_instances['selected_pl']) / len(scores_across_instances['selected_pl']),
+                'non_executable_count': scores_across_instances['non_executable_count'],
             }
         
         intermediates[task] = scores_across_instances
