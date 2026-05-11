@@ -42,7 +42,7 @@ if __name__=='__main__':
     )
 
     parser.add_argument('--infinigen_installation_path', 
-        type=str, default=f"{os.path.abspath('infinigen/Blender.app/Contents/MacOS/Blender')}", 
+        type=str, default=f"{os.path.abspath('infinigen/blender/blender')}", 
         help="The installation path of blender executable file. It's `infinigen/blender/blender` by default."
     )
 
