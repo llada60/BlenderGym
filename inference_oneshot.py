@@ -121,8 +121,8 @@ def run_single_task(args, task):
             "task_tag": resume_signature.get("task_tag", normalize_task_tag(resume_signature.get("task", ""))),
             "generator_type": resume_signature.get("generator_type"),
             "tree_dims": normalize_tree_dims(resume_signature.get("tree_dims")),
-            "blender_render_script_path": resume_signature.get("blender_render_script_path"),
-            "infinigen_installation_path": resume_signature.get("infinigen_installation_path"),
+            "blender_render_script_path": os.path.abspath(resume_signature.get("blender_render_script_path", "")),
+            "infinigen_installation_path": os.path.abspath(resume_signature.get("infinigen_installation_path", "")),
         }
         if normalized_resume_signature != task_signature:
             raise ValueError(
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--infinigen_installation_path',
         type=str,
-        default=f"{os.path.abspath('infinigen/Blender.app/Contents/MacOS/Blender')}",
+        default=f"{os.path.abspath('infinigen/blender/blender')}",
         help='The installation path of blender executable file.'
     )
 
