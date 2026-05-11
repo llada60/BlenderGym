@@ -46,11 +46,25 @@ if __name__=='__main__':
         help="The installation path of blender executable file. It's `infinigen/blender/blender` by default."
     )
 
+    parser.add_argument(
+        '--render_device',
+        type=str,
+        choices=['auto', 'cpu', 'gpu'],
+        default='auto',
+        help="Cycles render device selection. Use 'cpu' to skip GPU initialization entirely.",
+    )
+
     # parse, save, and validate the args
     args = parser.parse_args()
     inference_metadata_saved_path = args.inference_metadata_saved_path
     eval_render_save_dir = args.eval_render_save_dir
     infinigen_installation_path = args.infinigen_installation_path
+    render_device = args.render_device
+
+    if render_device == 'cpu':
+        os.environ["BLENDERGYM_FORCE_CPU"] = "1"
+    elif render_device == 'gpu':
+        os.environ.pop("BLENDERGYM_FORCE_CPU", None)
 
     blender_render_script_path = "bench_data/all_render_script.py"
 
