@@ -316,19 +316,39 @@ def blender_step(infinigen_installation_path, blender_file_path, blender_render_
     print('render_dir: ', render_dir)
 
     # Enter the blender code
-    command = [infinigen_installation_path, "--background", blender_file_path, 
-                    "--python", blender_render_script_path, 
-                    "--", script_path, render_dir]
-    command = ' '.join(command)
-    command_run = subprocess.run(command, shell=True, check=True)
+    command = [
+        infinigen_installation_path,
+        "--background",
+        blender_file_path,
+        "--python",
+        blender_render_script_path,
+        "--",
+        script_path,
+        render_dir,
+    ]
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout)
+    if completed.stderr:
+        print(completed.stderr, file=sys.stderr)
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
 
     if is_directory_empty(render_dir):
         print(f"The following bpy script didn't run correctly in blender:{script_path}")
         return False
-        # raise CodeExecutionException 
-    else:
-        if merge_all_renders:
-            merge_images_in_directory(render_dir, saved_to_local=True, merge_dir_into_image=merge_dir_into_image)
+    if merge_all_renders:
+        merge_images_in_directory(render_dir, saved_to_local=True, merge_dir_into_image=merge_dir_into_image)
 
     return True
 

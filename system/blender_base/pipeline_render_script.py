@@ -46,7 +46,11 @@ def _enable_auto_smooth_for_weighted_normals():
         if obj.type != "MESH" or obj.data is None:
             continue
         if any(mod.type == "WEIGHTED_NORMAL" for mod in obj.modifiers):
-            obj.data.use_auto_smooth = True
+            try:
+                obj.data.use_auto_smooth = True
+            except AttributeError:
+                # Blender 4.x removed Mesh.use_auto_smooth; best-effort fallback.
+                pass
 
 
 def _render_with_fallback():
@@ -110,13 +114,16 @@ if __name__ == "__main__":
     # Set color mode to RGB
     bpy.context.scene.render.image_settings.color_mode = 'RGB'
 
+    # Some generated edits trigger depsgraph updates before rendering.
+    _enable_auto_smooth_for_weighted_normals()
+
     # Read and execute the code from the specified file
     with open(code_fpath, "r") as f:
         code = f.read()
     try:
         exec(code)
-    except:
-        raise ValueError
+    except Exception as exc:
+        raise RuntimeError(f"Generated edit execution failed: {exc}") from exc
 
     _enable_auto_smooth_for_weighted_normals()
 
