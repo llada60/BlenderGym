@@ -71,6 +71,14 @@ if __name__=='__main__':
         help="The installation path of blender executable file. It's `infinigen/blender/blender` by default."
     )
 
+    parser.add_argument(
+        '--render_device',
+        type=str,
+        choices=['auto', 'cpu', 'gpu'],
+        default='auto',
+        help="Cycles render device selection. Use 'cpu' to skip GPU initialization entirely.",
+    )
+
     parser.add_argument('--custom_vlm_system', 
         action='store_true', 
         help='''Whether change our VLM setup. If you want to change our VLM system (i.e. rewire/delete our generator-verifier structure)
@@ -105,6 +113,12 @@ if __name__=='__main__':
     blender_render_script_path = args.blender_render_script_path
     infinigen_installation_path = args.infinigen_installation_path
     tree_dims = tree_dim_parse(args.tree_dims)
+    render_device = args.render_device
+
+    if render_device == 'cpu':
+        os.environ["BLENDERGYM_FORCE_CPU"] = "1"
+    elif render_device == 'gpu':
+        os.environ.pop("BLENDERGYM_FORCE_CPU", None)
 
     # infinigen_installation_path = 
     custom_vlm_system = args.custom_vlm_system
@@ -196,7 +210,6 @@ if __name__=='__main__':
 
             with open(info_saving_json_path, 'w') as file:
                 json.dump(generation_results, file, indent=4)
-
 
 
 

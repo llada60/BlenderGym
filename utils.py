@@ -9,7 +9,8 @@ import shutil
 from torchvision import transforms
 
 
-env = os.environ.copy()
+def _runtime_env():
+    return os.environ.copy()
 
 ## Focus on model swapping; make a default_BA.py (all BA-based structure) that can reproduce our results, also allow customzied system 
 ## 
@@ -103,7 +104,7 @@ def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_rende
     print(f'config_dict: {config_dict}')
     print(f'command: {command}')
 
-    subprocess.run(command, shell=True, env=env)
+    subprocess.run(command, shell=True, env=_runtime_env())
 
     proposal_edits_dir_path = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d{tree_dims[0]}_b{tree_dims[1]}/scripts'
     proposal_renders_dir_path = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d{tree_dims[0]}_b{tree_dims[1]}/renders'
@@ -196,7 +197,7 @@ def BlenderAlchemy_run_oneshot(blender_file_path, start_script, start_render, go
     completed = subprocess.run(
         command,
         shell=True,
-        env=env,
+        env=_runtime_env(),
         check=False,
         capture_output=True,
         text=True,
