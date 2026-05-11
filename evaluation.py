@@ -92,12 +92,16 @@ if __name__=='__main__':
                 blender_file_path = instance_info['blender_file_path']
                 start_file_path = instance_info['start_script_path']
                 goal_file_path = instance_info['goal_script_path']
+                proposal_edits_paths = instance_info['proposal_edits_paths']
             except:
                 continue
 
             executable_proposal_names = []
 
-            for proposal_path in (instance_info['proposal_edits_paths'] + [start_file_path, goal_file_path]):
+            if not proposal_edits_paths:
+                continue
+
+            for proposal_path in (proposal_edits_paths + [start_file_path, goal_file_path]):
                 # Render the images for that proposal_renders_path
                 proposal_name = os.path.basename(proposal_path).split('.')[0] # Extract the name of py file, without suffix
                 proposal_renders_dir = os.path.join(task_instance_dir, proposal_name)
@@ -162,6 +166,9 @@ if __name__=='__main__':
                 with open(task_instance_scores_path, 'w') as file:
                     json.dump(task_instance_scores, file, indent=4)
 
+            if not task_instance_scores:
+                continue
+
             # Extract best scores and record them
             best_n_clip_proposal_name = min(task_instance_scores, key=lambda proposal_name: task_instance_scores[proposal_name]['avg_n_clip'])            
             best_pl_proposal_name = min(task_instance_scores, key=lambda proposal_name: task_instance_scores[proposal_name]['avg_pl'])
@@ -175,7 +182,7 @@ if __name__=='__main__':
             scores_across_instances['best_pl'].append(best_pl)
 
             # Handle selected edit if applicable
-            selected_proposal_path = instance_info['selected_edit_path']
+            selected_proposal_path = instance_info.get('selected_edit_path')
             if selected_proposal_path:
                 selected_proposal_name = os.path.basename(selected_proposal_path).split('.')[0]
                 
