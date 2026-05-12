@@ -15,7 +15,21 @@ def _runtime_env():
 ## Focus on model swapping; make a default_BA.py (all BA-based structure) that can reproduce our results, also allow customzied system 
 ## 
 
-def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_render, blender_render_script_path, task_instance_id, task, infinigen_installation_path, generator_type, evaluator_type, starter_time=None, tree_dims=(4, 8)):
+def BlenderAlchemy_run(
+    blender_file_path,
+    start_script,
+    start_render,
+    goal_render,
+    blender_render_script_path,
+    task_instance_id,
+    task,
+    infinigen_installation_path,
+    generator_type,
+    evaluator_type,
+    starter_time=None,
+    tree_dims=(4, 8),
+    output_dir_name=None,
+):
     '''
     Generation and potentially selection process of the VLM system.
 
@@ -48,7 +62,9 @@ def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_rende
     variants = ['tune_leap']
 
     # To automatically differentiate the inference results
-    if starter_time:
+    if output_dir_name:
+        output_folder_name = f"outputs/{output_dir_name}"
+    elif starter_time:
         output_folder_name = f"outputs/outputs_{starter_time}"
     else:
         output_folder_name = "outputs/outputs_test"
@@ -104,7 +120,30 @@ def BlenderAlchemy_run(blender_file_path, start_script, start_render, goal_rende
     print(f'config_dict: {config_dict}')
     print(f'command: {command}')
 
-    subprocess.run(command, shell=True, env=_runtime_env())
+    completed = subprocess.run(
+        command,
+        shell=True,
+        env=_runtime_env(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout)
+    if completed.stderr:
+        print(completed.stderr, file=sys.stderr)
+    if completed.returncode != 0:
+        if "FATAL_LLM_RESPONSE_LIMIT:" in completed.stderr or "FATAL_LLM_RESPONSE_LIMIT:" in completed.stdout:
+            raise RuntimeError(
+                "FATAL_LLM_RESPONSE_LIMIT: "
+                + (completed.stderr.strip() or completed.stdout.strip())
+            )
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            command,
+            output=completed.stdout,
+            stderr=completed.stderr,
+        )
 
     proposal_edits_dir_path = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d{tree_dims[0]}_b{tree_dims[1]}/scripts'
     proposal_renders_dir_path = f'system/{output_folder_name}/{task_instance_id}/instance0/{variants[0]}_d{tree_dims[0]}_b{tree_dims[1]}/renders'

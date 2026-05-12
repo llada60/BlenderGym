@@ -4,6 +4,7 @@ import time
 import json
 
 from utils import BlenderAlchemy_run_oneshot
+from tasksolver.exceptions import GPTMaxTriesExceededException
 
 
 task_instance_count_dict = {
@@ -81,8 +82,24 @@ def normalize_tree_dims(tree_dims):
 
 
 def should_stop_on_error(exc):
-    msg = str(exc)
-    return "LIMIT" in msg
+    if isinstance(exc, GPTMaxTriesExceededException):
+        return True
+
+    msg = str(exc).lower()
+    indicators = [
+        "fatal_llm_response_limit",
+        "rate limit",
+        "usage limit",
+        "quota",
+        "429",
+        "exceeded your current quota",
+        "credit balance",
+        "token limit",
+        "context length",
+        "too many tokens",
+        "no response",
+    ]
+    return any(indicator in msg for indicator in indicators)
 
 
 def resolve_resume_state_path(info_saving_dir_path, task_name, generator_type):

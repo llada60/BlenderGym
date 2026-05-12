@@ -5,6 +5,7 @@ import time
 import json
 
 from utils import BlenderAlchemy_run, tree_dim_parse
+from tasksolver.exceptions import GPTMaxTriesExceededException
 
 
 task_instance_count_dict = {
@@ -101,15 +102,76 @@ def normalize_task_tag(task_arg):
 
 def normalize_tree_dims(tree_dims):
     if isinstance(tree_dims, str):
-        return tree_dim_parse(tree_dims)
+        parsed_tree_dims = tree_dim_parse(tree_dims)
+        return [int(parsed_tree_dims[0]), int(parsed_tree_dims[1])]
     if isinstance(tree_dims, (list, tuple)) and len(tree_dims) == 2:
         return [int(tree_dims[0]), int(tree_dims[1])]
     return tree_dims
 
 
+def normalize_signature_path(path):
+    if not path:
+        return ""
+    return os.path.realpath(os.path.abspath(os.path.expanduser(path)))
+
+
+def build_task_signature(task, args):
+    return {
+        "task": task,
+        "task_tag": normalize_task_tag(task),
+        "custom_vlm_system": args.custom_vlm_system,
+        "generator_type": args.generator_type,
+        "verifier_type": args.verifier_type,
+        "render_device": args.render_device,
+        "tree_dims": normalize_tree_dims(args.tree_dims),
+        "blender_render_script_path": normalize_signature_path(args.blender_render_script_path),
+        "infinigen_installation_path": normalize_signature_path(args.infinigen_installation_path),
+    }
+
+
+def normalize_resume_signature(resume_signature):
+    return {
+        "task": resume_signature.get("task"),
+        "task_tag": resume_signature.get("task_tag", normalize_task_tag(resume_signature.get("task", ""))),
+        "custom_vlm_system": resume_signature.get("custom_vlm_system", False),
+        "generator_type": resume_signature.get("generator_type"),
+        "verifier_type": resume_signature.get("verifier_type"),
+        "render_device": resume_signature.get("render_device", "auto"),
+        "tree_dims": normalize_tree_dims(resume_signature.get("tree_dims")),
+        "blender_render_script_path": normalize_signature_path(resume_signature.get("blender_render_script_path", "")),
+        "infinigen_installation_path": normalize_signature_path(resume_signature.get("infinigen_installation_path", "")),
+    }
+
+
+def describe_signature_mismatch(expected_signature, actual_signature):
+    differing_fields = []
+    for key in expected_signature.keys():
+        if expected_signature.get(key) != actual_signature.get(key):
+            differing_fields.append(
+                f"{key}: resume={actual_signature.get(key)!r}, current={expected_signature.get(key)!r}"
+            )
+    return "; ".join(differing_fields)
+
+
 def should_stop_on_error(exc):
-    msg = str(exc)
-    return "LIMIT" in msg
+    if isinstance(exc, GPTMaxTriesExceededException):
+        return True
+
+    msg = str(exc).lower()
+    indicators = [
+        "fatal_llm_response_limit",
+        "rate limit",
+        "usage limit",
+        "quota",
+        "429",
+        "exceeded your current quota",
+        "credit balance",
+        "token limit",
+        "context length",
+        "too many tokens",
+        "no response",
+    ]
+    return any(indicator in msg for indicator in indicators)
 
 
 def resolve_resume_state_path(info_saving_dir_path, task_name, generator_type, verifier_type, custom_vlm_system):
@@ -138,17 +200,7 @@ def run_single_task(args, task):
 
     print(f'task_instance_dir_paths: {task_instance_dir_paths}')
 
-    task_signature = {
-        "task": task,
-        "task_tag": task_tag,
-        "custom_vlm_system": args.custom_vlm_system,
-        "generator_type": args.generator_type,
-        "verifier_type": args.verifier_type,
-        "render_device": args.render_device,
-        "tree_dims": normalize_tree_dims(args.tree_dims),
-        "blender_render_script_path": os.path.abspath(args.blender_render_script_path),
-        "infinigen_installation_path": os.path.abspath(args.infinigen_installation_path),
-    }
+    task_signature = build_task_signature(task, args)
     resume_state_path = resolve_resume_state_path(
         args.info_saving_dir_path,
         task,
@@ -162,20 +214,12 @@ def run_single_task(args, task):
             resume_state = json.load(file)
 
         resume_signature = resume_state.get("task_signature", {})
-        normalized_resume_signature = {
-            "task": resume_signature.get("task"),
-            "task_tag": resume_signature.get("task_tag", normalize_task_tag(resume_signature.get("task", ""))),
-            "custom_vlm_system": resume_signature.get("custom_vlm_system", False),
-            "generator_type": resume_signature.get("generator_type"),
-            "verifier_type": resume_signature.get("verifier_type"),
-            "render_device": resume_signature.get("render_device", "auto"),
-            "tree_dims": normalize_tree_dims(resume_signature.get("tree_dims")),
-            "blender_render_script_path": os.path.abspath(resume_signature.get("blender_render_script_path", "")),
-            "infinigen_installation_path": os.path.abspath(resume_signature.get("infinigen_installation_path", "")),
-        }
+        normalized_resume_signature = normalize_resume_signature(resume_signature)
         if normalized_resume_signature != task_signature:
+            mismatch_details = describe_signature_mismatch(task_signature, normalized_resume_signature)
             raise ValueError(
                 f"Found resume state at {resume_state_path}, but it does not match the current arguments. "
+                f"Mismatched fields: {mismatch_details}. "
                 "Use the same command to resume, or remove that resume file first."
             )
 

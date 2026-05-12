@@ -76,6 +76,50 @@ where:
 
 This mode does not call a verifier or evaluator model. It always runs with one-step, one-candidate generation semantics. Outputs will be saved under `system/outputs/` in directories named like `tune_leap_d1_b1`, and metadata will be saved under `info_saved/` by default.
 
+## Retrying Failed Instances
+
+If some instances fail during inference (e.g., due to transient errors), you can rerun only the failed ones using the retry scripts. Both scripts accept an `errors.json` file — a list of failed instances produced automatically during inference or by `reconstruct_metadata.py`.
+
+**Generator-verifier mode:**
+```
+python inference_retry.py \
+  --errors_json [path_to_errors.json] \
+  --generator_type [model_id] \
+  --verifier_type [model_id]
+```
+
+**One-shot mode:**
+```
+python inference_oneshot_retry.py \
+  --errors_json [path_to_errors.json] \
+  --generator_type [model_id]
+```
+
+The `errors.json` format is a JSON array where each entry has `task`, `task_instance_id`, `instance_dir_path`, and `error` fields. These files are written to `info_saved/` automatically when a run finishes with failures, or can be generated with `reconstruct_metadata.py` (see below).
+
+Results are saved to a new timestamped `intermediate_metadata_retry_*.json` (or `intermediate_metadata_oneshot_retry_*.json`) under `info_saved/`, which can then be passed to `evaluation.py`.
+
+## Reconstructing Metadata from Outputs
+
+If inference completed but the metadata JSON was lost or corrupted, you can reconstruct it from the outputs directory:
+```
+python reconstruct_metadata.py --outputs_dir system/outputs/outputs_[task]_[timestamp]
+
+# With optional overrides:
+python reconstruct_metadata.py \
+  --outputs_dir system/outputs/outputs_material_05-10-23-55-43 \
+  --generator_type [model_id] \
+  --bench_data_dir bench_data \
+  --info_saving_dir info_saved
+```
+where:
+* `--outputs_dir`: path to an existing outputs directory under `system/outputs/`.
+* `--generator_type`: model identifier to embed in the reconstructed metadata (default: `unknown`).
+* `--bench_data_dir`: path to the benchmark data directory (default: `bench_data`).
+* `--info_saving_dir`: directory where the reconstructed metadata and errors JSON are written (default: `info_saved`).
+
+The script writes a reconstructed `intermediate_metadata_oneshot_*.json` and, if any instances are missing or incomplete, an `errors_oneshot_*.json` file — both under `info_saved/`. The errors file can be passed directly to `inference_oneshot_retry.py`.
+
 ## Evaluation of VLM-generated results
 This section introduces how to evaluate the output from your VLM after generating the output edits.
 ```
@@ -142,6 +186,11 @@ After you are done with the two steps above, you may jump back to [VLM Setup](#v
 | Claude 3.5 Sonnet | claude-3-5-sonnet-20240620  |
 | Claude 3.5 Haiku  |  claude-3-5-haiku-latest |
 | Claude 3 Opus | claude-3-opus-latest  |
+| Claude Code (default CLI model) | claude-code |
+| Claude Code Sonnet | claude-code-sonnet |
+| Claude Code Haiku 4.5 | claude-code-haiku-4-5 |
+| Claude Code Sonnet 4.6 | claude-code-sonnet-4-6 |
+| Claude Code Opus 4.7 | claude-code-opus-4-7 |
 | Gemini 2.0 Flash | gemini-2.0-flash |
 | Gemini 1.5 Flash | gemini-1.5-flash |
 | InternVL2(8B)  |  intern |
@@ -167,7 +216,6 @@ If you find our work useful, please cite the Bibtex below:
       url={https://arxiv.org/abs/2504.01786}, 
 }
 ```
-
 
 
 

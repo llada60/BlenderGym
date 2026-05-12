@@ -5,12 +5,13 @@ Takes in a single prompt (language and/or image)
 from pathlib import Path
 import os
 import argparse
+import sys
 import yaml
 from loguru import logger
 
 import urllib
 
-from refinement_process import refinement
+from refinement_process import refinement, is_response_limit_error
 from tasksolver.keychain import KeyChain
 
 if __name__ == "__main__":
@@ -85,13 +86,22 @@ if __name__ == "__main__":
                 
                  
                 # down the hole we go.
-                refinement(config, 
-                           credentials=kc,
-                           breadth=breadth, depth=depth,
-                           blender_file=args.starter_blend,
-                           blender_script=args.blender_base,
-                           init_code=args.blender_script,
-                           method_variation=var,
-                           output_folder=results_folder)  
+                try:
+                    refinement(
+                        config,
+                        credentials=kc,
+                        breadth=breadth,
+                        depth=depth,
+                        blender_file=args.starter_blend,
+                        blender_script=args.blender_base,
+                        init_code=args.blender_script,
+                        method_variation=var,
+                        output_folder=results_folder,
+                    )
+                except Exception as exc:
+                    if is_response_limit_error(exc):
+                        print(f"FATAL_LLM_RESPONSE_LIMIT: {exc}", file=sys.stderr)
+                        sys.exit(42)
+                    raise
                             
                                 

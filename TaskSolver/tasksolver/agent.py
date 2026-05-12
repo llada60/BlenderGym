@@ -57,7 +57,19 @@ class Agent(object):
             from .claude_code import ClaudeCodeModel
 
             logger.info(f"creating Claude Code CLI-based agent of type: {vision_model}")
-            _CLAUDE_CODE_ALIASES = {"claude-code-sonnet": "sonnet", "claude-code-opus": "opus"}
+            # Support stable BlenderGym-facing model_ids while still targeting
+            # the names accepted by the local Claude Code CLI.
+            _CLAUDE_CODE_ALIASES = {
+                "claude-code": None,
+                "claude-code-sonnet": "sonnet",
+                "claude-code-opus": "opus",
+                "claude-code-haiku": "claude-haiku-4-5",
+                "claude-code-haiku-4-5": "claude-haiku-4-5",
+                "claude-code-sonnet-4-5": "claude-sonnet-4-5",
+                "claude-code-sonnet-4-6": "claude-sonnet-4-6",
+                "claude-code-opus-4-5": "claude-opus-4-5",
+                "claude-code-opus-4-7": "claude-opus-4-7",
+            }
             if vision_model in _CLAUDE_CODE_ALIASES:
                 model = _CLAUDE_CODE_ALIASES[vision_model]
             elif vision_model == "claude-code":
